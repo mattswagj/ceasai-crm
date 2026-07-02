@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0e0f13" />
 <title>CeasAI CRM</title>
+<!-- v2: companies owner_id fix + Outreach hub -->
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e0f13'/%3E%3Ctext x='32' y='44' font-size='34' font-family='Georgia' font-weight='bold' text-anchor='middle' fill='%23d4af37'%3EC%3C/text%3E%3C/svg%3E" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -348,7 +349,8 @@ const state = {
   view:"dashboard",
   data:{contacts:[],companies:[],deals:[],tasks:[],activities:[],templates:[]},
   ui:{contactSearch:"",contactStatus:"",contactSort:{k:"updated_at",dir:-1},
-      companySearch:"", taskFilter:"open", global:""}
+      companySearch:"", taskFilter:"open", global:"",
+      outreachTab:"leads", outreach:{quick:"all",channel:"",status:""}}
 };
 
 /* ============================================================
@@ -1085,11 +1087,106 @@ async function delTask(id){
 /* ============================================================
    OUTREACH (templates + activity feed)
 ============================================================ */
+/* ---------- Outreach hub helpers ---------- */
+const OUTREACH_TYPES=["email","call","text","meeting","dm","instagram_dm"];
+function isOutreachAct(a){return OUTREACH_TYPES.includes(a.type)||(!!a.channel&&a.channel!=="stage_change");}
+function actChannel(a){let ch=a.channel||a.type;if(ch==="dm")ch="instagram_dm";return ch;}
+function leadStats(c){
+  const acts=state.data.activities.filter(a=>a.contact_id===c.id);
+  const out=acts.filter(a=>isOutreachAct(a)&&a.direction!=="inbound");
+  const inbound=acts.filter(a=>a.direction==="inbound");
+  const channels=[...new Set(out.map(actChannel))];
+  const last=out[0]||null; // activities are ordered occurred_at desc from loadAll
+  const openTasks=state.data.tasks.filter(t=>t.contact_id===c.id&&!t.done&&t.due_date).sort((a,b)=>a.due_date<b.due_date?-1:1);
+  return {out,inbound,channels,last,nextFollow:openTasks[0]||null,hasReply:inbound.length>0,contacted:out.length>0};
+}
+function channelChip(ch){const lbl=CHANNEL_LABELS[ch]||ch;const ic={email:"✉",instagram_dm:"📷",call:"☎",text:"💬",meeting:"👥"}[ch]||"•";return `<span class="tag">${ic} ${esc(lbl)}</span>`;}
+
 function renderOutreach(v){
+  const tab=state.ui.outreachTab||"leads";
+  const bar=`<div class="subtabs">
+    <button class="${tab==="leads"?"active":""}" onclick="state.ui.outreachTab='leads';render()">Work the list</button>
+    <button class="${tab==="templates"?"active":""}" onclick="state.ui.outreachTab='templates';render()">Templates</button>
+  </div>`;
+  if(tab==="templates"){v.innerHTML=bar+renderOutreachTemplates();return;}
+
+  const o=state.ui.outreach;
+  const weekAgo=Date.now()-7*86400*1000;
+  const stats=new Map();state.data.contacts.forEach(c=>stats.set(c.id,leadStats(c)));
+  let contactedWeek=0,replies=0,notContacted=0;
+  state.data.contacts.forEach(c=>{const s=stats.get(c.id);
+    if(s.out.some(a=>new Date(a.occurred_at).getTime()>weekAgo))contactedWeek++;
+    if(s.hasReply)replies++;
+    if(!s.contacted)notContacted++;});
+  const dueToday=state.data.tasks.filter(t=>!t.done&&t.due_date===todayStr()).length;
+
+  let list=state.data.contacts.slice();
+  if(o.status)list=list.filter(c=>c.status===o.status);
+  if(o.channel)list=list.filter(c=>{const s=stats.get(c.id);
+    if(o.channel==="none")return !s.contacted;
+    return s.channels.includes(o.channel);});
+  if(o.quick==="notcontacted")list=list.filter(c=>!stats.get(c.id).contacted);
+  else if(o.quick==="overdue")list=list.filter(c=>{const f=stats.get(c.id).nextFollow;return !!f&&isOverdue(f.due_date);});
+  else if(o.quick==="needs")list=list.filter(c=>{const f=stats.get(c.id).nextFollow;return !!f&&f.due_date<=todayStr();});
+
+  function prio(c){const s=stats.get(c.id),f=s.nextFollow;
+    if(f&&isOverdue(f.due_date))return 0;
+    if(f&&f.due_date===todayStr())return 1;
+    if(!s.contacted)return 2;
+    return 3;}
+  list.sort((a,b)=>{const pa=prio(a),pb=prio(b);if(pa!==pb)return pa-pb;
+    const sa=stats.get(a.id),sb=stats.get(b.id);
+    return (sa.last?new Date(sa.last.occurred_at).getTime():0)-(sb.last?new Date(sb.last.occurred_at).getTime():0);});
+  state._outreachList=list.map(c=>c.id);
+
+  const metrics=`<div class="grid cards" style="margin-bottom:16px">
+    ${stat("Contacted this week",contactedWeek,"✉","last 7 days")}
+    ${stat("Replies",replies,"↩",replies?"leads replied":"none yet")}
+    ${stat("Follow-ups due today",dueToday,"⏰",dueToday?'<span style="color:var(--amber)">action needed</span>':"all clear")}
+    ${stat("Not yet contacted",notContacted,"○","fresh leads")}
+  </div>`;
+
+  const quicks={all:"All",needs:"Needs follow-up",overdue:"Overdue",notcontacted:"Not contacted"};
+  const toolbar=`<div class="toolbar">
+    ${Object.keys(quicks).map(k=>`<button class="btn sm ${o.quick===k?"primary":""}" onclick="state.ui.outreach.quick='${k}';render()">${quicks[k]}</button>`).join("")}
+    <select style="max-width:160px" onchange="state.ui.outreach.channel=this.value;render()">
+      <option value="">All channels</option>
+      <option value="email" ${o.channel==="email"?"selected":""}>✉ Email used</option>
+      <option value="instagram_dm" ${o.channel==="instagram_dm"?"selected":""}>📷 Instagram DM used</option>
+      <option value="none" ${o.channel==="none"?"selected":""}>None yet</option>
+    </select>
+    <select style="max-width:150px" onchange="state.ui.outreach.status=this.value;render()">
+      <option value="">All statuses</option>
+      ${CONTACT_STATUSES.map(st=>`<option ${o.status===st?"selected":""}>${st}</option>`).join("")}
+    </select>
+    <div class="spacer"></div>
+    <span class="muted" style="font-size:12.5px">${list.length} lead${list.length===1?"":"s"}</span>
+    <button class="btn primary" onclick="workList()" ${list.length?"":"disabled"}>▶ Work the list</button>
+  </div>`;
+
+  const rows=list.map(c=>{
+    const s=stats.get(c.id),f=s.nextFollow,od=f&&isOverdue(f.due_date);
+    const lastTxt=s.last?`${relTime(s.last.occurred_at)} · ${CHANNEL_LABELS[actChannel(s.last)]||actChannel(s.last)}`:'<span class="muted">never</span>';
+    const chans=s.channels.length?s.channels.map(channelChip).join(""):'<span class="muted">—</span>';
+    const follow=f
+      ?`<span style="${od?'color:var(--red);font-weight:700':''}">${fmtDate(f.due_date)}${od?' ⚠ overdue':''}</span>`
+      :(s.contacted?'<span class="muted">—</span>':'<span class="chip" style="color:var(--gold2);border-color:var(--gold)">new lead</span>');
+    return `<tr onclick="workLead('${c.id}')">
+      <td><div class="cell-main">${esc(contactName(c))}</div><div class="cell-sub">${esc(companyName(c.company_id)||c.title||"")}</div></td>
+      <td>${chans}</td>
+      <td class="cell-sub">${lastTxt}</td>
+      <td><span class="st st-${c.status}">${c.status}</span></td>
+      <td>${follow}</td>
+      <td class="right"><button class="btn primary sm" onclick="event.stopPropagation();workLead('${c.id}')">✨ Work</button></td>
+    </tr>`;}).join("");
+
+  v.innerHTML=bar+metrics+toolbar+(list.length?`<div class="table-wrap"><table>
+    <thead><tr><th>Lead</th><th>Channels used</th><th>Last outreach</th><th>Status</th><th>Next follow-up</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`:emptyBox("No leads match","Try clearing filters, or add contacts to start working the list."));
+}
+function renderOutreachTemplates(){
   const A=state.data.activities.filter(a=>a.type!=="stage_change"&&a.type!=="note");
-  const upcoming=state.data.tasks.filter(t=>!t.done&&(t.type==="follow-up"||t.type==="call"||t.type==="email")).slice(0,10);
-  v.innerHTML=`
-  <div class="dashgrid">
+  return `<div class="dashgrid">
     <div>
       <div class="panel" style="margin-bottom:14px">
         <h3>Message templates <span class="sub">· reusable outreach</span>
@@ -1104,16 +1201,24 @@ function renderOutreach(v){
       </div>
     </div>
     <div>
-      <div class="panel" style="margin-bottom:14px">
-        <h3>Follow-ups due</h3>
-        ${upcoming.length?upcoming.map(taskRowMini).join(""):emptyBox("Nothing scheduled","")}
-      </div>
       <div class="panel">
         <h3>Recent outreach</h3>
-        ${A.length?`<ul class="timeline">${A.slice(0,12).map(activityItem).join("")}</ul>`:emptyBox("No outreach logged","Open a contact and log a call or email.")}
+        ${A.length?`<ul class="timeline">${A.slice(0,12).map(activityItem).join("")}</ul>`:emptyBox("No outreach logged","Work the list to start reaching out.")}
       </div>
     </div>
   </div>`;
+}
+/* ---------- Work-the-list queue ---------- */
+function workLead(id){
+  const list=state._outreachList||[];
+  let pos=list.indexOf(id);
+  if(pos<0)openEmailGen(id,{queue:[id],pos:0});
+  else openEmailGen(id,{queue:list,pos});
+}
+function workList(){
+  const list=state._outreachList||[];
+  if(!list.length)return;
+  openEmailGen(list[0],{queue:list,pos:0});
 }
 function editTemplate(id){
   const t=id?byId(state.data.templates,id):{channel:"email"};
@@ -1288,16 +1393,16 @@ const EG_PURPOSE={
 
 /* Short, casual Instagram DM copy — pitches CeasAI, personalized, soft CTA */
 const EG_DM={
-  greet:["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first} — hope you're good!"],
+  greet:["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first} — hope you're good!","Heyy {first} 👋","Hi {first}! 😊","{first}! hope your week's going great","Hey there {first}!"],
   "Intro":{
-    open:["love what you're doing at {company}.","been checking out {company} — really great stuff.","came across {company} and had to reach out."],
-    value:["I'm with {mycompany} — we build simple AI apps for {bizType}s that capture leads and follow up + book clients for you automatically.","We help {bizType}s like yours {win} with one simple app (instant lead capture, on-brand follow-ups, one-line booking).","I build custom AI that takes {industryHook} off your plate so you can {win}."],
-    cta:["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {company}?","Down to chat this week?"]
+    open:["love what you're doing at {company}.","been checking out {company} — really great stuff.","came across {company} and had to reach out.","{company} caught my eye — genuinely impressed with what you're building.","been following {company} for a bit and love the vibe."],
+    value:["I'm with {mycompany} — we build simple AI apps for {bizType}s that capture leads and follow up + book clients for you automatically.","We help {bizType}s like yours {win} with one simple app (instant lead capture, on-brand follow-ups, one-line booking).","I build custom AI that takes {industryHook} off your plate so you can {win}.","We make one little app that handles {industryHook} for {bizType}s so you can just focus on the work."],
+    cta:["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {company}?","Down to chat this week?","Mind if I share a quick example?","Would love to show you — cool if I DM a demo?"]
   },
   "Cold outreach":{
-    open:["quick one — I think I can help {company} book more clients.","I'll be quick! I help {bizType}s stop losing leads.","reaching out because {company} would be a perfect fit for what we build."],
-    value:["{mycompany} builds one simple app that captures every lead and follows up + books them automatically.","We help {bizType}s {win} — no more {industryHook}.","It's custom AI that replies to leads in seconds so you can {win}."],
-    cta:["Want me to send a quick example?","Open to a 2-min look?","Cool if I share more?","Free for a quick call this week?"]
+    open:["quick one — I think I can help {company} book more clients.","I'll be quick! I help {bizType}s stop losing leads.","reaching out because {company} would be a perfect fit for what we build.","promise to keep this short — I think there's a real fit with {company}.","random DM, I know! but I think this could genuinely help {company}."],
+    value:["{mycompany} builds one simple app that captures every lead and follows up + books them automatically.","We help {bizType}s {win} — no more {industryHook}.","It's custom AI that replies to leads in seconds so you can {win}.","one simple app that ends {industryHook} — built around how {company} actually works."],
+    cta:["Want me to send a quick example?","Open to a 2-min look?","Cool if I share more?","Free for a quick call this week?","Worth a quick look? no pressure at all.","Should I send a couple examples for {bizType}s?"]
   },
   "Follow-up":{
     open:["just circling back on my last message!","wanted to bump this in case it got buried.","following up — no worries if now's not the time."],
@@ -1413,14 +1518,34 @@ function egGenerateDM(){
   egState.subject="";egState.body=body;
   return {subject:"",body};
 }
-function openEmailGen(contactId){
+function openEmailGen(contactId,opts){
   const c=byId(state.data.contacts,contactId);
   if(!c){toast("Contact not found","err");return;}
-  egState={contactId,channel:"email",purpose:"Intro",tone:"Friendly",last:null};
+  const queue=(opts&&opts.queue)||null, qpos=(opts&&opts.pos)||0;
+  // pre-set a sensible channel from what the contact has on file
+  let channel="email";
+  if(!c.email&&c.instagram)channel="instagram_dm";
+  else if(c.email)channel="email";
+  else if(c.instagram)channel="instagram_dm";
+  egState={contactId,channel,purpose:"Intro",tone:"Friendly",last:null,queue,qpos};
   egGenerate();
-  openModal("✨ Generate outreach — "+contactName(c),`<div id="eg-root">${egModalInner()}</div>`,
-    [{label:"Close",cls:"ghost",act:()=>openContact(contactId)}],true);
+  const title=(queue?`✨ Outreach ${qpos+1}/${queue.length} — `:"✨ Generate outreach — ")+contactName(c);
+  openModal(title,`<div id="eg-root">${egModalInner()}</div>`,
+    [{label:queue?"Done":"Close",cls:"ghost",act:egCloseGen}],true);
   egSyncPreview();
+}
+function egCloseGen(){
+  const q=egState.queue, id=egState.contactId;
+  closeModal();
+  if(q)navigate("outreach");
+  else openContact(id);
+}
+function egSkip(){egAdvance();}
+function egAdvance(){
+  const q=egState.queue;if(!q){egCloseGen();return;}
+  const pos=(egState.qpos||0)+1;
+  if(pos<q.length){openEmailGen(q[pos],{queue:q,pos});}
+  else{closeModal();toast("List complete 🎉 nice work","ok");navigate("outreach");}
 }
 function egModalInner(){
   const isDM=egState.channel==="instagram_dm";
@@ -1450,6 +1575,7 @@ function egModalInner(){
       ? `<button class="btn" onclick="egOpenInstagram()">📷 Open Instagram</button>`
       : `<button class="btn" onclick="egMailto()">✉ Open in email</button>`}
     <button class="btn" onclick="egLogOutreach()">✓ Log as Outreach</button>
+    ${egState.queue?`<button class="btn ghost" onclick="egSkip()">Skip →</button>`:""}
   </div>`;
 }
 function egRerender(){const r=$("#eg-root");if(r){r.innerHTML=egModalInner();egSyncPreview();}}
@@ -1512,8 +1638,8 @@ async function egLogOutreach(){
     toast(isDM?"DM logged as outreach ✓":"Logged as outreach ✓","ok");
     await Promise.all([reload("activities"),reload("tasks"),reload("contacts")]);
     renderNavBadges();
-    openContact(c.id);
-    if(state.view!=="contacts")render();
+    if(egState.queue){egAdvance();}
+    else{openContact(c.id);if(state.view!=="contacts")render();}
   }catch(e){toastErr(e);document.querySelectorAll(".eg-actions .btn").forEach(b=>b.disabled=false);}
 }
 

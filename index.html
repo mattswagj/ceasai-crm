@@ -327,7 +327,9 @@ const DEAL_STAGES = ["New","Contacted","Qualified","Proposal","Won","Lost"];
 const STAGE_COLORS = {New:"#3b82f6",Contacted:"#8b5cf6",Qualified:"#22b8cf",Proposal:"#f5a524",Won:"#30a46c",Lost:"#e5484d"};
 const STATUS_COLORS = {New:"#3b82f6",Contacted:"#8b5cf6",Qualified:"#22b8cf",Customer:"#30a46c",Lost:"#e5484d"};
 const TASK_TYPES = ["call","email","meeting","follow-up","todo"];
-const CHANNELS = ["email","call","text","meeting"];
+const CHANNELS = ["email","call","text","meeting","instagram_dm"];
+const SOURCES = ["Instagram","LinkedIn","Referral","Website","Cold email","Cold call","Event","Other"];
+const CHANNEL_LABELS = {email:"Email",call:"Call",text:"Text",meeting:"Meeting",instagram_dm:"Instagram DM"};
 const NAV = [
   {id:"dashboard",label:"Dashboard",ic:"◧"},
   {id:"contacts",label:"Contacts",ic:"◔"},
@@ -363,6 +365,7 @@ function relTime(d){if(!d)return "";const s=(Date.now()-new Date(d))/1000;if(s<6
 function todayStr(){return new Date().toISOString().slice(0,10);}
 function isOverdue(d){return d && d<todayStr();}
 function contactName(c){if(!c)return "";return ((c.first_name||"")+" "+(c.last_name||"")).trim()||c.email||"Unnamed";}
+function igHandle(v){return String(v||"").trim().replace(/^@+/,"").replace(/^https?:\/\/(www\.)?instagram\.com\//i,"").replace(/[/?#].*$/,"");}
 function companyName(id){const c=byId(state.data.companies,id);return c?c.name:"";}
 function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
 
@@ -601,7 +604,7 @@ function donut(rows){
 }
 function activityItem(a){
   const c=byId(state.data.contacts,a.contact_id);
-  const icon={email:"✉",call:"☎",text:"💬",meeting:"👥",note:"✎",stage_change:"⇄"}[a.type]||"•";
+  const icon={email:"✉",call:"☎",text:"💬",meeting:"👥",note:"✎",stage_change:"⇄",dm:"📷",instagram_dm:"📷"}[a.type]||"•";
   return `<li><span class="tdot"></span>
     <div class="th">${icon} ${esc(a.subject||a.type)}${c?` · <a onclick="openContact('${c.id}')">${esc(contactName(c))}</a>`:""}</div>
     <div class="tm">${relTime(a.occurred_at)}${a.direction?" · "+a.direction:""}</div>
@@ -651,7 +654,7 @@ function renderContacts(v){
       <td><span class="st st-${c.status}">${c.status}</span></td>
       <td>${(c.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")||'<span class="muted">—</span>'}</td>
       <td class="cell-sub">${relTime(c.updated_at)}</td>
-      <td class="right"><button class="btn ghost sm" title="Generate email" onclick="event.stopPropagation();openEmailGen('${c.id}')">✨</button></td>
+      <td class="right"><button class="btn ghost sm" title="Generate outreach" onclick="event.stopPropagation();openEmailGen('${c.id}')">✨</button></td>
     </tr>`).join("")}
     </tbody></table></div>`:emptyBox("No contacts found",q||state.ui.contactStatus?"Try clearing filters.":"Add your first contact to get started.")}`;
 }
@@ -670,8 +673,9 @@ function editContact(id){
     <div class="row"><div class="field"><label>Company</label><select id="f-company">${compOpts}</select></div>
       <div class="field"><label>Title</label><input id="f-title" value="${esc(c.title||"")}"/></div></div>
     <div class="row"><div class="field"><label>Status</label><select id="f-status">${CONTACT_STATUSES.map(s=>`<option ${c.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
-      <div class="field"><label>Source</label><input id="f-source" value="${esc(c.source||"")}" placeholder="Referral, Website…"/></div></div>
-    <div class="field"><label>Tags (comma separated)</label><input id="f-tags" value="${esc((c.tags||[]).join(", "))}"/></div>
+      <div class="field"><label>Source</label><select id="f-source"><option value="">— none —</option>${SOURCES.map(s=>`<option ${c.source===s?"selected":""}>${s}</option>`).join("")}${c.source&&!SOURCES.includes(c.source)?`<option selected>${esc(c.source)}</option>`:""}</select></div></div>
+    <div class="row"><div class="field"><label>Instagram handle</label><input id="f-instagram" value="${esc(c.instagram||"")}" placeholder="@handle"/></div>
+      <div class="field"><label>Tags (comma separated)</label><input id="f-tags" value="${esc((c.tags||[]).join(", "))}"/></div></div>
     <div class="field"><label>Notes</label><textarea id="f-notes">${esc(c.notes||"")}</textarea></div>
   `,[
     id?{label:"Delete",cls:"danger",act:()=>delContact(id)}:null,
@@ -685,6 +689,7 @@ async function saveContact(id){
     email:$("#f-email").value.trim()||null, phone:$("#f-phone").value.trim()||null,
     company_id:$("#f-company").value||null, title:$("#f-title").value.trim()||null,
     status:$("#f-status").value, source:$("#f-source").value.trim()||null,
+    instagram:$("#f-instagram").value.trim()||null,
     tags:$("#f-tags").value.split(",").map(s=>s.trim()).filter(Boolean),
     notes:$("#f-notes").value.trim()||null, updated_at:new Date().toISOString()
   };
@@ -722,12 +727,13 @@ function renderContactDrawer(id){
     <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
       ${info("Email",c.email?`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`:"—")}
       ${info("Phone",c.phone?esc(c.phone):"—")}
+      ${info("Instagram",c.instagram?`<a href="https://instagram.com/${esc(igHandle(c.instagram))}" target="_blank" rel="noopener">@${esc(igHandle(c.instagram))}</a>`:"—")}
       ${info("Source",esc(c.source||"—"))}
       ${info("Owner",esc(state.profile.full_name||state.user.email))}
     </div>
     ${(c.tags||[]).length?`<div style="margin-bottom:12px">${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`:""}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn sm primary" onclick="openEmailGen('${id}')">✨ Generate Email</button>
+      <button class="btn sm primary" onclick="openEmailGen('${id}')">✨ Generate outreach</button>
       <button class="btn sm" onclick="logOutreach('${id}')">✉ Log outreach</button>
       <button class="btn sm" onclick="addNote('${id}')">✎ Note</button>
       <button class="btn sm" onclick="editTask(null,'${id}')">✓ Task</button>
@@ -762,7 +768,7 @@ function logOutreach(contactId){
   const tplOpts=`<option value="">— template —</option>`+state.data.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("");
   openModal("Log outreach — "+contactName(c),`
     <div class="row">
-      <div class="field"><label>Channel</label><select id="o-channel">${CHANNELS.map(x=>`<option>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Channel</label><select id="o-channel">${CHANNELS.map(x=>`<option value="${x}">${CHANNEL_LABELS[x]||x}</option>`).join("")}</select></div>
       <div class="field"><label>Direction</label><select id="o-dir"><option>outbound</option><option>inbound</option></select></div>
     </div>
     <div class="field"><label>Use template</label><select id="o-tpl" onchange="applyTpl(this.value)">${tplOpts}</select></div>
@@ -780,7 +786,7 @@ async function saveOutreach(contactId){
   const type=$("#o-channel").value;
   try{
     const {error}=await sb.from("activities").insert(withOrg({
-      contact_id:contactId,type,direction:$("#o-dir").value,
+      contact_id:contactId,type,channel:type,direction:$("#o-dir").value,
       subject:$("#o-subj").value.trim()||null,body:$("#o-body").value.trim()||null,occurred_at:new Date().toISOString()
     }));if(error)throw error;
     if($("#o-followup").checked){
@@ -807,8 +813,8 @@ function addNote(contactId){
 
 /* ----- CSV ----- */
 function exportCSV(){
-  const cols=["first_name","last_name","email","phone","company","title","status","source","tags","notes"];
-  const rows=state.data.contacts.map(c=>[c.first_name,c.last_name,c.email,c.phone,companyName(c.company_id),c.title,c.status,c.source,(c.tags||[]).join("; "),c.notes]);
+  const cols=["first_name","last_name","email","phone","instagram","company","title","status","source","tags","notes"];
+  const rows=state.data.contacts.map(c=>[c.first_name,c.last_name,c.email,c.phone,c.instagram,companyName(c.company_id),c.title,c.status,c.source,(c.tags||[]).join("; "),c.notes]);
   const csv=[cols.join(","),...rows.map(r=>r.map(csvCell).join(","))].join("\n");
   const blob=new Blob([csv],{type:"text/csv"});const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);a.download="contacts-"+todayStr()+".csv";a.click();
@@ -838,13 +844,13 @@ function previewImport(rows){
   const map={first:idx("first name")>=0?idx("first name"):idx("first_name"),
     last:idx("last name")>=0?idx("last name"):idx("last_name"),
     name:idx("name"),email:idx("email"),phone:idx("phone"),company:idx("company"),
-    title:idx("title"),status:idx("status"),source:idx("source"),tags:idx("tags"),notes:idx("notes")};
+    title:idx("title"),status:idx("status"),source:idx("source"),tags:idx("tags"),notes:idx("notes"),instagram:idx("instagram")};
   const body=rows.slice(1);
   const parsed=body.map(r=>{
     let fn=map.first>=0?r[map.first]:"",ln=map.last>=0?r[map.last]:"";
     if((!fn&&!ln)&&map.name>=0){const p=(r[map.name]||"").trim().split(/\s+/);fn=p.shift()||"";ln=p.join(" ");}
     return {first_name:(fn||"").trim(),last_name:(ln||"").trim(),
-      email:g(r,map.email),phone:g(r,map.phone),
+      email:g(r,map.email),phone:g(r,map.phone),instagram:g(r,map.instagram),
       title:g(r,map.title),status:CONTACT_STATUSES.includes((g(r,map.status)||"").trim())?g(r,map.status).trim():"New",
       source:g(r,map.source)||"CSV import",
       tags:(g(r,map.tags)||"").split(/[;,]/).map(s=>s.trim()).filter(Boolean),
@@ -866,7 +872,7 @@ async function runImport(parsed){
       if(error)throw error;(data||[]).forEach(c=>compMap[c.name.toLowerCase()]=c.id);
     }
     const payload=parsed.map(p=>withOrg({first_name:p.first_name,last_name:p.last_name,email:p.email||null,
-      phone:p.phone||null,title:p.title||null,status:p.status,source:p.source||null,tags:p.tags,notes:p.notes||null,
+      phone:p.phone||null,instagram:p.instagram||null,title:p.title||null,status:p.status,source:p.source||null,tags:p.tags,notes:p.notes||null,
       company_id:p._company?compMap[p._company.toLowerCase()]:null,updated_at:new Date().toISOString()}));
     const {error}=await sb.from("contacts").insert(payload);if(error)throw error;
     toast("Imported "+payload.length+" contacts","ok");closeModal();
@@ -1208,51 +1214,115 @@ const EG_TONE={
   Warm:{greet:["Hi {first},","Hello {first},","Hi {first}, I hope this note finds you well —"],
             sign:["Warm regards,","All the best,","With appreciation,","Warmly,"]}
 };
-const EG_BENEFITS=["streamline your outreach and close more deals","turn more of your leads into customers",
-  "save your team hours every week","get more out of your existing pipeline","book more qualified meetings",
-  "grow revenue without adding headcount","move deals through your pipeline faster"];
+const EG_BENEFITS=["capture and qualify every lead automatically, so none slip through the cracks",
+  "send on-brand follow-ups without ever lifting a finger","let clients book in one line, straight from a DM or your site",
+  "turn missed calls and DMs into booked appointments","run your whole business from one simple app",
+  "reply to every lead in seconds, even when you're with a client","spend less time on admin and more time on the work you love"];
+
+/* Industry-aware personalization for {bizType}, {win}, {industryHook} */
+const EG_INDUSTRY=[
+  {kw:/gym|fitness|trainer|personal train|crossfit|pilates|yoga|bootcamp|strength|coach.*fit|fit.*coach/i,
+   biz:"gym",win:"fill more sessions and keep clients on track between visits",hook:"chasing clients to rebook and reminding them about sessions"},
+  {kw:/salon|barber|hair|spa|nail|lash|brow|beauty|esthet|makeup/i,
+   biz:"salon",win:"keep your chairs full and cut down on no-shows",hook:"juggling DMs, texts and the booking book at once"},
+  {kw:/tutor|teacher|educat|academ|test prep|music lesson|lesson|school|learning/i,
+   biz:"tutoring practice",win:"turn parent inquiries into booked sessions automatically",hook:"replying to every inquiry and scheduling by hand"},
+  {kw:/clean|maid|janitor|housekeep|home service|handyman|hvac|plumb|electric|pest/i,
+   biz:"home-services business",win:"book more jobs and quote leads the moment they reach out",hook:"missing calls while you're out on a job"},
+  {kw:/landscap|lawn|garden|tree|snow|hardscape|irrigation/i,
+   biz:"landscaping business",win:"quote and schedule jobs without the endless phone tag",hook:"leads going cold before you can call them back"},
+  {kw:/photo|videograph|film|content creat|studio.*photo|photograph/i,
+   biz:"photography business",win:"turn inquiries into booked shoots on autopilot",hook:"inquiries piling up across your inbox and DMs"},
+  {kw:/clinic|wellness|health|dental|chiro|therap|med spa|medical|dermatolog|physio|counsel/i,
+   biz:"practice",win:"keep your calendar full and follow up with every patient",hook:"front-desk busywork and missed follow-ups"}
+];
+function egIndustryProfile(text){
+  const t=String(text||"");
+  for(const p of EG_INDUSTRY){if(p.kw.test(t))return p;}
+  return {biz:"business",win:"capture every lead and follow up automatically",hook:"leads slipping through the cracks"};
+}
 const EG_PURPOSE={
   "Intro":{
-    subjects:["Quick intro — {mycompany}","{mycompany} × {company}","Great to connect, {first}","An introduction from {myname}","Hello from {mycompany}"],
-    open:["I wanted to introduce myself — I'm {myname} at {mycompany}.","I've been looking forward to connecting with you at {company}.","Putting a face to the name — {myname} here, from {mycompany}.","I'm reaching out to introduce myself and what we're building at {mycompany}."],
-    value:["We help teams like {company} {benefit}. I'd love to hear what you're focused on this quarter.","At {mycompany} we help teams {benefit} — and {company} stood out as a great fit.","The teams we work with come to us to {benefit}, and I think we could do the same for {company}."],
-    cta:["Would you be open to a quick 15-minute chat this week?","Do you have time for a brief call in the next few days?","Worth a short conversation to see if there's a fit?","Mind if I send over a couple of times to connect?"]
+    subjects:["A simpler way to run {company}","{mycompany} × {company}","Quick idea for {company}, {first}","One app to run your {bizType}","Helping {bizType}s like {company} run on autopilot"],
+    open:["I'm {myname} with {mycompany} — we build custom AI apps for {bizType}s like {company}.","Came across {company} and wanted to reach out — I'm {myname} at {mycompany}.","Quick hello from {mycompany}; we build custom agentic AI for small businesses like {company}.","I'm {myname} at {mycompany} — we help {bizType}s {win}."],
+    value:["We build one simple app that captures your leads, follows up automatically, and lets clients book in a single line — so you can {win}.","Think instant lead capture, on-brand follow-ups, and one-line booking, all in one app built around {company}. It helps {bizType}s {win}.","{mycompany} puts your whole business in one app — a ready-made CRM, a booking page, and AI that handles {industryHook} for you."],
+    cta:["Open to a quick 15-minute look this week?","Worth a short call to see if it'd fit {company}?","Want me to send a 2-minute overview?","Mind if I show you what it'd look like for {company}?"]
   },
   "Cold outreach":{
-    subjects:["A quick idea for {company}","{first}, worth 15 minutes?","Idea for {company}","{mycompany} — quick idea for {company}","Worth a look, {first}?"],
-    open:["I'll keep this short — I think {mycompany} could genuinely help {company}.","I know a cold email is easy to ignore, so I'll be quick.","We've been helping teams {benefit}, and {company} came to mind.","Reaching out because I think there's a real opportunity for {company}."],
-    value:["Most teams we talk to are trying to {benefit} without adding overhead — that's exactly what we do.","In short: we help teams {benefit}. Happy to share a couple of examples relevant to {company}.","We've helped similar teams {benefit}, often within the first few weeks."],
-    cta:["Open to a quick look? I can send a short overview.","If it's relevant, would a 10-minute call make sense?","Want me to send over a couple of examples?","Should I share more, or is now not the right time?"]
+    subjects:["A quick idea for {company}","{first}, worth 15 minutes?","Fewer missed leads at {company}","{mycompany} — quick idea for your {bizType}","Booked out on autopilot, {first}?"],
+    open:["I'll keep this short — I think {mycompany} could genuinely help {company}.","I know a cold email is easy to ignore, so I'll be quick.","We build custom AI for {bizType}s, and {company} came to mind.","Reaching out because I think there's a real opportunity for {company}."],
+    value:["We build one simple app that captures every lead, sends on-brand follow-ups, and books clients in one line — so you can {win}.","In short: {mycompany} builds custom AI that ends {industryHook}. It helps {bizType}s {win}.","Most {bizType}s we work with want to {win} without hiring anyone — that's exactly what our app does."],
+    cta:["Open to a quick look? I can send a short overview.","If it's relevant, would a 10-minute call make sense?","Want me to send a couple of examples for {bizType}s?","Should I share more, or is now not the right time?"]
   },
   "Follow-up":{
-    subjects:["Following up, {first}","Re: {mycompany} × {company}","Circling back","Quick follow-up","Still worth a chat, {first}?"],
+    subjects:["Following up, {first}","Re: {mycompany} × {company}","Circling back on {company}","Quick follow-up","Still worth a look, {first}?"],
     open:["I wanted to follow up on {lastTouch}.","Circling back on my last note in case it slipped by.","Following up to see if you'd had a chance to think it over.","Just floating this back to the top of your inbox."],
-    value:["No pressure at all — I know things get busy. The offer to {benefit} still stands.","Happy to share more on how we help teams {benefit} whenever the timing's right.","If it's helpful, I can put together something specific to {company}."],
+    value:["No pressure at all — I know things get busy. The idea of one app to {win} still stands.","Happy to show how {mycompany} helps {bizType}s {win} whenever the timing's right.","If it's helpful, I can put together a quick demo built around {company}."],
     cta:["Would this week or next be better for a quick call?","Should I follow up again down the road, or is there interest now?","Want me to send a few times that work?","Is this still on your radar?"]
   },
   "Re-engagement":{
     subjects:["Long time, {first}","Reconnecting — {mycompany}","Picking this back up","Still thinking of {company}","Good time to reconnect?"],
     open:["It's been a little while since we last connected{sinceLast}.","I know it's been a while — wanted to reopen our conversation.","Reaching back out to reconnect after some time.","Circling back around after a bit of a gap."],
-    value:["A lot has changed on our side, and I think it's more relevant to {company} than ever.","We've since helped more teams {benefit}, and I'd love to catch you up.","If {benefit} is still a priority for {company}, it may be worth another look."],
+    value:["We've built a lot since we last talked — our app now handles {industryHook} end to end for {bizType}s.","We've since helped more {bizType}s {win}, and I'd love to catch you up.","If it's still a priority to {win}, {company} may be worth another look."],
     cta:["Would you be open to picking this back up?","Worth a quick catch-up call?","Should I send over what's new?","Is now a better time than before?"]
   },
   "Book a call":{
-    subjects:["15 minutes this week, {first}?","Grabbing time with you","Quick call, {first}?","Let's find 15 minutes","A time to connect"],
-    open:["I'd love to find 15 minutes to talk properly.","Rather than go back and forth by email, could we grab a quick call?","I think a short call would be the fastest way to see if we can help {company}."],
-    value:["On the call I can walk you through how we help teams {benefit} — tailored to {company}.","It'd be a quick, no-pressure conversation to see if there's a fit.","I'll keep it to 15 minutes and make it worth your time."],
+    subjects:["15 minutes this week, {first}?","Grabbing time with you","Quick call about {company}?","Let's find 15 minutes","A time to connect"],
+    open:["I'd love to find 15 minutes to talk properly.","Rather than go back and forth, could we grab a quick call?","I think a short call is the fastest way to show how we'd help {company}."],
+    value:["On the call I'll walk you through how our app helps {bizType}s {win} — built around {company}.","It'd be a quick, no-pressure look at what we'd build for {company}.","I'll keep it to 15 minutes and make it worth your time."],
     cta:["Does Tuesday or Thursday afternoon work?","What does your calendar look like this week?","Happy to work around your schedule — just name a time.","Want me to send a calendar link?"]
   },
   "Proposal":{
-    subjects:["Proposal for {company}","As promised — {company} proposal","Next steps for {company}","{company} × {mycompany}: proposal","Your proposal, {first}"],
-    open:["As promised, I've put together a proposal for {company}.","Following our conversation, here's a proposal tailored to {company}.","I've outlined how we'd help {company} {benefit}."],
-    value:["It covers scope, timeline, and pricing, and is built around what we discussed.","The goal is simple: {benefit}, with clear milestones along the way.","I've kept it focused on the outcomes that matter most to {company}."],
-    cta:["Happy to walk through it live — when works for you?","Take a look and let me know your thoughts?","Should we set up a time to review it together?","Any questions before we move ahead?"]
+    subjects:["Proposal for {company}","As promised — {company} proposal","Next steps for {company}","{company} × {mycompany}: proposal","Your build plan, {first}"],
+    open:["As promised, I've put together a proposal for {company}.","Following our conversation, here's a plan tailored to {company}.","I've outlined exactly what we'd build to help {company} {win}."],
+    value:["It covers the app we'd build — lead capture, automated follow-ups, and one-line booking — plus timeline and pricing.","The goal is simple: {win}, with a custom app and clear milestones along the way.","I've kept it focused on the outcomes that matter most to your {bizType}."],
+    cta:["Happy to walk through it live — when works for you?","Take a look and let me know your thoughts?","Should we set up a time to review it together?","Any questions before we get started?"]
   },
   "Thank you":{
     subjects:["Thank you, {first}","Great talking today","Thanks for your time","Appreciated the conversation","Thank you — next steps"],
-    open:["Thank you for taking the time to talk today.","I really enjoyed our conversation — thank you.","Thanks so much for connecting; it was great to learn about {company}."],
-    value:["I'm excited about the possibility of helping {company} {benefit}.","Based on what we discussed, I'm confident we can {benefit}.","I'll follow up shortly with the next steps we talked about."],
+    open:["Thank you for taking the time to talk today.","I really enjoyed our conversation — thank you.","Thanks so much for connecting; it was great to learn how {company} runs."],
+    value:["I'm excited about the possibility of building something that helps {company} {win}.","Based on what we discussed, I'm confident we can end {industryHook} for you.","I'll follow up shortly with the build plan we talked about."],
     cta:["In the meantime, don't hesitate to reach out with any questions.","I'll be in touch soon — but I'm here if anything comes up.","Looking forward to what's next.","Let me know if there's anything I can send over in the meantime."]
+  }
+};
+
+/* Short, casual Instagram DM copy — pitches CeasAI, personalized, soft CTA */
+const EG_DM={
+  greet:["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first},"],
+  "Intro":{
+    open:["love what you're doing at {company}.","been checking out {company} — really great stuff.","came across {company} and had to reach out."],
+    value:["I'm with {mycompany} — we build simple AI apps for {bizType}s that capture leads and follow up + book clients for you automatically.","We help {bizType}s like yours {win} with one simple app (instant lead capture, on-brand follow-ups, one-line booking).","I build custom AI that takes {industryHook} off your plate so you can {win}."],
+    cta:["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {company}?","Down to chat this week?"]
+  },
+  "Cold outreach":{
+    open:["quick one — I think I can help {company} book more clients.","I'll be quick! I help {bizType}s stop losing leads.","reaching out because {company} would be a perfect fit for what we build."],
+    value:["{mycompany} builds one simple app that captures every lead and follows up + books them automatically.","We help {bizType}s {win} — no more {industryHook}.","It's custom AI that replies to leads in seconds so you can {win}."],
+    cta:["Want me to send a quick example?","Open to a 2-min look?","Cool if I share more?","Free for a quick call this week?"]
+  },
+  "Follow-up":{
+    open:["just circling back on my last message!","wanted to bump this in case it got buried.","following up — no worries if now's not the time."],
+    value:["still happy to show how {mycompany} helps {bizType}s {win} with one simple app.","the idea of one app to capture + follow up + book your clients still stands.","I can put together a quick demo built around {company} whenever."],
+    cta:["Want me to send it over?","Still worth a quick look?","Good time to chat this week?","Should I check back later?"]
+  },
+  "Re-engagement":{
+    open:["been a minute! Hope {company} is thriving.","reconnecting after a while — thought of {company}.","circling back around after some time!"],
+    value:["we've built a lot since — our app now handles {industryHook} end to end for {bizType}s.","we've helped more {bizType}s {win} lately and I'd love to catch you up.","might be worth another look if you still want to {win}."],
+    cta:["Open to picking this back up?","Want the quick rundown?","Free for a quick catch-up?","Better timing now?"]
+  },
+  "Book a call":{
+    open:["would love to grab 15 min with you.","think a quick call is the easiest way to show you this.","got a few minutes this week?"],
+    value:["I'll walk you through how our app helps {bizType}s {win}, built around {company}.","quick, no-pressure look at what we'd build for {company}.","15 minutes, promise to make it worth it."],
+    cta:["Tues or Thurs work?","What's your week look like?","Want me to send a link?","Just name a time!"]
+  },
+  "Proposal":{
+    open:["as promised, here's what I'd build for {company}.","putting together a quick plan for {company}!","here's the outline for {company}."],
+    value:["lead capture, auto follow-ups, and one-line booking — one app to {win}.","it's all built to end {industryHook} for your {bizType}.","kept it focused on what matters most to {company}."],
+    cta:["Want to hop on and walk through it?","Take a peek and lmk your thoughts?","Any questions before we start?","Should we pick a time?"]
+  },
+  "Thank you":{
+    open:["thanks so much for chatting today!","really enjoyed the conversation — thank you!","great talking with you about {company}."],
+    value:["excited about building something that helps {company} {win}.","confident we can take {industryHook} off your plate.","I'll send over the plan we talked about shortly."],
+    cta:["Reach out anytime in the meantime!","I'll be in touch soon!","Talk soon 🙌","Here if anything comes up."]
   }
 };
 let egState={};
@@ -1279,20 +1349,27 @@ function egContext(c){
   const acts=state.data.activities.filter(a=>a.contact_id===c.id);
   const last=acts[0];
   let lastTouch="my last note",sinceLast="";
-  if(last){const t=last.type==="email"?"email":last.type==="call"?"call":last.type==="meeting"?"conversation":(last.type||"note");
+  if(last){const t=last.type==="email"?"email":last.type==="call"?"call":last.type==="meeting"?"conversation":last.type==="dm"||last.type==="instagram_dm"?"DM":(last.type||"note");
     lastTouch="my last "+t+" "+relTime(last.occurred_at);sinceLast=" — our last "+t+" was "+relTime(last.occurred_at);}
+  const co=byId(state.data.companies,c.company_id);
+  const ind=egIndustryProfile((co&&co.industry)||(c.tags||[]).join(" ")||(c.title||""));
   return {
     first:(c.first_name||"there"),
-    company:companyName(c.company_id)||"your company",
-    myname:s.name||"the team",
-    mycompany:s.company||"our team",
+    company:companyName(c.company_id)||"your business",
+    myname:s.name||"the CeasAI team",
+    mycompany:s.company||"CeasAI",
     mytitle:s.title||"",
+    myig:"@ceas_ai",
     source:c.source||"",
+    bizType:ind.biz,
+    win:ind.win,
+    industryHook:ind.hook,
     benefit:egPick(EG_BENEFITS),
     lastTouch,sinceLast
   };
 }
 function egGenerate(){
+  if(egState.channel==="instagram_dm")return egGenerateDM();
   const c=byId(state.data.contacts,egState.contactId);if(!c)return;
   const ctx=egContext(c);
   const P=EG_PURPOSE[egState.purpose]||EG_PURPOSE["Intro"];
@@ -1320,41 +1397,69 @@ function egGenerate(){
   egState.subject=subject;egState.body=body;
   return {subject,body};
 }
+function egGenerateDM(){
+  const c=byId(state.data.contacts,egState.contactId);if(!c)return;
+  const ctx=egContext(c);
+  const D=EG_DM[egState.purpose]||EG_DM["Intro"];
+  const L=egState.last||{};
+  const greet=egMerge(egPickBut(EG_DM.greet,L.greet),ctx);
+  const open=egMerge(egPickBut(D.open,L.open),ctx);
+  const value=egMerge(egPickBut(D.value,L.value),ctx);
+  const cta=egMerge(egPickBut(D.cta,L.cta),ctx);
+  egState.last={greet,open,value,cta};
+  // 2–4 short casual sentences, no subject.
+  const body=greet+" "+open+" "+value+" "+cta;
+  egState.subject="";egState.body=body;
+  return {subject:"",body};
+}
 function openEmailGen(contactId){
   const c=byId(state.data.contacts,contactId);
   if(!c){toast("Contact not found","err");return;}
-  egState={contactId,purpose:"Intro",tone:"Friendly",last:null};
+  egState={contactId,channel:"email",purpose:"Intro",tone:"Friendly",last:null};
   egGenerate();
-  openModal("✨ Generate Email — "+contactName(c),egModalBody(),
+  openModal("✨ Generate outreach — "+contactName(c),`<div id="eg-root">${egModalInner()}</div>`,
     [{label:"Close",cls:"ghost",act:()=>openContact(contactId)}],true);
   egSyncPreview();
 }
-function egModalBody(){
+function egModalInner(){
+  const isDM=egState.channel==="instagram_dm";
   return `
+  <div class="field" style="margin-bottom:12px"><label>Channel</label>
+    <div class="eg-chips" id="eg-channel">
+      <span class="eg-chip ${!isDM?"on":""}" onclick="egSetChannel('email')">✉ Email</span>
+      <span class="eg-chip ${isDM?"on":""}" onclick="egSetChannel('instagram_dm')">📷 Instagram DM</span>
+    </div></div>
   <div class="row" style="gap:16px;flex-wrap:wrap">
     <div class="field" style="margin-bottom:10px"><label>Purpose</label>
-      <div class="eg-chips" id="eg-purpose">${EG_PURPOSES.map(p=>`<span class="eg-chip ${p===egState.purpose?"on":""}" onclick="egSet('purpose',this.textContent)">${p}</span>`).join("")}</div></div>
+      <div class="eg-chips" id="eg-purpose">${EG_PURPOSES.map(p=>`<span class="eg-chip ${p===egState.purpose?"on":""}" onclick="egSet('purpose','${p.replace(/'/g,"\\'")}')">${p}</span>`).join("")}</div></div>
     <div class="field" style="margin-bottom:10px;flex:0 0 auto"><label>Tone</label>
-      <div class="eg-chips" id="eg-tone">${EG_TONES.map(t=>`<span class="eg-chip ${t===egState.tone?"on":""}" onclick="egSet('tone',this.textContent)">${t}</span>`).join("")}</div></div>
+      <div class="eg-chips" id="eg-tone">${EG_TONES.map(t=>`<span class="eg-chip ${t===egState.tone?"on":""}" onclick="egSet('tone','${t}')">${t}</span>`).join("")}</div></div>
   </div>
   <div class="eg-preview">
-    <label>Subject</label>
-    <input id="eg-subject" class="eg-subject" value="${esc(egState.subject)}"/>
-    <label style="margin-top:10px">Email body</label>
-    <textarea id="eg-body" class="eg-body">${esc(egState.body)}</textarea>
+    ${isDM?"":`<label>Subject</label>
+    <input id="eg-subject" class="eg-subject" value="${esc(egState.subject)}"/>`}
+    <label ${isDM?"":`style="margin-top:10px"`}>${isDM?"Instagram DM message":"Email body"}</label>
+    <textarea id="eg-body" class="eg-body" ${isDM?`style="min-height:150px"`:""}>${esc(egState.body)}</textarea>
     <div class="eg-meta" id="eg-meta"></div>
   </div>
   <div class="eg-actions">
     <button class="btn primary" onclick="egRegenerate()">↻ Regenerate</button>
     <button class="btn" onclick="egCopy()">⧉ Copy</button>
-    <button class="btn" onclick="egMailto()">✉ Open in email client</button>
+    ${isDM
+      ? `<button class="btn" onclick="egOpenInstagram()">📷 Open Instagram</button>`
+      : `<button class="btn" onclick="egMailto()">✉ Open in email</button>`}
     <button class="btn" onclick="egLogOutreach()">✓ Log as Outreach</button>
   </div>`;
 }
+function egRerender(){const r=$("#eg-root");if(r){r.innerHTML=egModalInner();egSyncPreview();}}
 function egSet(kind,val){
   egState[kind]=val;egState.last=null;
-  const wrap=$("#eg-"+kind);if(wrap)wrap.querySelectorAll(".eg-chip").forEach(el=>el.classList.toggle("on",el.textContent===val));
-  egGenerate();egSyncPreview();
+  egGenerate();egRerender();
+}
+function egSetChannel(val){
+  if(egState.channel===val)return;
+  egState.channel=val;egState.last=null;
+  egGenerate();egRerender();
 }
 function egRegenerate(){egGenerate();egSyncPreview();}
 function egSyncPreview(){
@@ -1363,14 +1468,24 @@ function egSyncPreview(){
   if(m&&c){const bits=[];if(c.first_name)bits.push(c.first_name);const cn=companyName(c.company_id);if(cn)bits.push(cn);
     if(c.title)bits.push(c.title);if(c.status)bits.push(c.status);if(c.source)bits.push("source: "+c.source);
     if((c.tags||[]).length)bits.push("tags: "+c.tags.join(", "));
-    m.textContent="✨ Personalized with "+(bits.join(" · ")||"contact details");}
+    let msg="✨ Personalized with "+(bits.join(" · ")||"contact details");
+    if(egState.channel==="instagram_dm"){msg+=c.instagram?" · DM to @"+igHandle(c.instagram):" · ⚠ no Instagram handle on file";}
+    m.textContent=msg;}
 }
 function egCurrent(){return {subject:($("#eg-subject")?$("#eg-subject").value:egState.subject),body:($("#eg-body")?$("#eg-body").value:egState.body)};}
 function egCopy(){
-  const {subject,body}=egCurrent();const text="Subject: "+subject+"\n\n"+body;
-  const done=()=>toast("Email copied to clipboard","ok");
+  const isDM=egState.channel==="instagram_dm";
+  const {subject,body}=egCurrent();
+  const text=isDM?body:("Subject: "+subject+"\n\n"+body);
+  const done=()=>toast(isDM?"DM copied to clipboard":"Email copied to clipboard","ok");
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>egCopyFallback(text,done));}
   else egCopyFallback(text,done);
+}
+function egOpenInstagram(){
+  const c=byId(state.data.contacts,egState.contactId);
+  const h=igHandle(c&&c.instagram);
+  if(!h){toast("Add an Instagram handle to this contact first","err");return;}
+  window.open("https://instagram.com/"+encodeURIComponent(h),"_blank","noopener");
 }
 function egCopyFallback(text,done){
   const ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
@@ -1383,15 +1498,17 @@ function egMailto(){
 }
 async function egLogOutreach(){
   const c=byId(state.data.contacts,egState.contactId);if(!c)return;
+  const isDM=egState.channel==="instagram_dm";
   const {subject,body}=egCurrent();
   document.querySelectorAll(".eg-actions .btn").forEach(b=>b.disabled=true);
   try{
-    const {error}=await sb.from("activities").insert(withOrg({contact_id:c.id,type:"email",direction:"outbound",
-      subject:subject||null,body:body||null,occurred_at:new Date().toISOString()}));
+    const {error}=await sb.from("activities").insert(withOrg({contact_id:c.id,
+      type:isDM?"dm":"email",channel:isDM?"instagram_dm":"email",direction:"outbound",
+      subject:isDM?"Instagram DM":(subject||null),body:body||null,occurred_at:new Date().toISOString()}));
     if(error)throw error;
     await sb.from("tasks").insert(withOrg({title:"Follow up: "+contactName(c),type:"follow-up",due_date:addDays(3),contact_id:c.id}));
     if(c.status==="New"){await sb.from("contacts").update({status:"Contacted",updated_at:new Date().toISOString()}).eq("id",c.id);}
-    toast("Logged as outreach ✓","ok");
+    toast(isDM?"DM logged as outreach ✓":"Logged as outreach ✓","ok");
     await Promise.all([reload("activities"),reload("tasks"),reload("contacts")]);
     renderNavBadges();
     openContact(c.id);

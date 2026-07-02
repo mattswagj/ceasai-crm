@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0e0f13" />
 <title>CeasAI CRM</title>
-<!-- v2: companies owner_id fix + Outreach hub -->
+<!-- v2.1: companies owner_id fix + Outreach hub + date TZ fix -->
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e0f13'/%3E%3Ctext x='32' y='44' font-size='34' font-family='Georgia' font-weight='bold' text-anchor='middle' fill='%23d4af37'%3EC%3C/text%3E%3C/svg%3E" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -361,7 +361,7 @@ const esc = s => (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":
 const byId = (arr,id)=>arr.find(x=>x.id===id);
 function initials(n){n=(n||"").trim();if(!n)return "?";const p=n.split(/\s+/);return ((p[0][0]||"")+(p[1]?p[1][0]:"")).toUpperCase();}
 function fmtMoney(v){v=Number(v||0);return "$"+v.toLocaleString("en-US",{maximumFractionDigits:0});}
-function fmtDate(d){if(!d)return "";const dt=new Date(d);if(isNaN(dt))return "";return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}
+function fmtDate(d){if(!d)return "";const dt=(typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d))?new Date(d+"T00:00:00"):new Date(d);if(isNaN(dt))return "";return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}
 function fmtDateTime(d){if(!d)return "";const dt=new Date(d);return dt.toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}
 function relTime(d){if(!d)return "";const s=(Date.now()-new Date(d))/1000;if(s<60)return "just now";if(s<3600)return Math.floor(s/60)+"m ago";if(s<86400)return Math.floor(s/3600)+"h ago";if(s<604800)return Math.floor(s/86400)+"d ago";return fmtDate(d);}
 function todayStr(){return new Date().toISOString().slice(0,10);}

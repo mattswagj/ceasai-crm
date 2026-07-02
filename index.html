@@ -209,6 +209,19 @@ tbody tr:hover{background:var(--panel2)}
 .bar-fill{height:100%;border-radius:6px;transition:width .4s}
 .bar-row .bn{width:32px;text-align:right;font-weight:700;font-size:12.5px}
 .spark{display:flex;align-items:flex-end;gap:4px;height:60px}
+/* ---------- ✨ Email generator ---------- */
+.eg-chips{display:flex;flex-wrap:wrap;gap:6px}
+.eg-chip{padding:6px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--panel2);color:var(--muted);
+  cursor:pointer;font-size:12px;font-weight:600;transition:.15s;user-select:none}
+.eg-chip:hover{color:var(--text);border-color:#454b5e}
+.eg-chip.on{background:var(--goldsoft);border-color:var(--gold);color:var(--gold2)}
+.eg-preview{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:2px}
+.eg-preview label{margin-top:0}
+input.eg-subject{font-weight:700;font-size:14px}
+textarea.eg-body{min-height:240px;font-size:13px;line-height:1.55;white-space:pre-wrap}
+.eg-meta{font-size:11.5px;color:var(--muted);margin-top:9px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.eg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+@media(max-width:560px){.eg-actions .btn{flex:1}}
 
 @media(max-width:860px){
   .shell{grid-template-columns:1fr}
@@ -629,7 +642,7 @@ function renderContacts(v){
   ${list.length?`<div class="table-wrap"><table>
     <thead><tr>
       ${th("Name","last_name")}${th("Company","company_id")}${th("Email","email")}
-      ${th("Status","status")}<th>Tags</th>${th("Updated","updated_at")}
+      ${th("Status","status")}<th>Tags</th>${th("Updated","updated_at")}<th class="right">Email</th>
     </tr></thead><tbody>
     ${list.map(c=>`<tr onclick="openContact('${c.id}')">
       <td><div class="cell-main">${esc(contactName(c))}</div><div class="cell-sub">${esc(c.title||"")}</div></td>
@@ -638,6 +651,7 @@ function renderContacts(v){
       <td><span class="st st-${c.status}">${c.status}</span></td>
       <td>${(c.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")||'<span class="muted">—</span>'}</td>
       <td class="cell-sub">${relTime(c.updated_at)}</td>
+      <td class="right"><button class="btn ghost sm" title="Generate email" onclick="event.stopPropagation();openEmailGen('${c.id}')">✨</button></td>
     </tr>`).join("")}
     </tbody></table></div>`:emptyBox("No contacts found",q||state.ui.contactStatus?"Try clearing filters.":"Add your first contact to get started.")}`;
 }
@@ -713,7 +727,8 @@ function renderContactDrawer(id){
     </div>
     ${(c.tags||[]).length?`<div style="margin-bottom:12px">${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`:""}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn sm primary" onclick="logOutreach('${id}')">✉ Log outreach</button>
+      <button class="btn sm primary" onclick="openEmailGen('${id}')">✨ Generate Email</button>
+      <button class="btn sm" onclick="logOutreach('${id}')">✉ Log outreach</button>
       <button class="btn sm" onclick="addNote('${id}')">✎ Note</button>
       <button class="btn sm" onclick="editTask(null,'${id}')">✓ Task</button>
       <button class="btn sm" onclick="editDeal(null,'${id}')">⛁ Deal</button>
@@ -1124,7 +1139,18 @@ async function delTemplate(id){
    SETTINGS
 ============================================================ */
 function renderSettings(v){
+  const es=egSettings();
   v.innerHTML=`<div style="max-width:560px">
+    <div class="panel" style="margin-bottom:14px">
+      <h3>✨ Email signature <span class="sub">· used by Generate Email</span></h3>
+      <div class="row"><div class="field"><label>Sender name</label><input id="es-name" value="${esc(es.name)}"/></div>
+        <div class="field"><label>Title / role</label><input id="es-title" value="${esc(es.title)}" placeholder="Founder"/></div></div>
+      <div class="field"><label>Company</label><input id="es-company" value="${esc(es.company)}"/></div>
+      <div class="field"><label>Signature block (optional — overrides the auto sign-off; supports {name}, {title}, {company})</label>
+        <textarea id="es-sig" placeholder="Jane Doe&#10;Founder, CeasAI&#10;(555) 123-4567&#10;ceasai.com">${esc(es.signature)}</textarea></div>
+      <button class="btn primary" onclick="saveEmailSettings()">Save signature</button>
+      <p class="muted" style="font-size:11.5px;margin:10px 0 0">Defaults to your profile name and workspace. Stored on this device.</p>
+    </div>
     <div class="panel" style="margin-bottom:14px">
       <h3>Workspace</h3>
       <div class="field"><label>Company / workspace name</label><input id="s-org" value="${esc(state.org?state.org.name:"")}"/></div>
@@ -1160,6 +1186,217 @@ async function saveProfile(){
   const full_name=$("#s-name").value.trim();
   const {error}=await sb.from("profiles").update({full_name}).eq("id",state.user.id);
   if(error)return toastErr(error);state.profile.full_name=full_name;renderChrome();toast("Profile saved","ok");
+}
+function saveEmailSettings(){
+  const o={name:$("#es-name").value.trim(),title:$("#es-title").value.trim(),
+    company:$("#es-company").value.trim(),signature:$("#es-sig").value};
+  if(egSaveSettings(o))toast("Signature saved","ok");
+}
+
+/* ============================================================
+   ✨ EMAIL GENERATOR  (client-side variation engine, no AI key)
+============================================================ */
+const EG_PURPOSES=["Intro","Cold outreach","Follow-up","Re-engagement","Book a call","Proposal","Thank you"];
+const EG_TONES=["Friendly","Professional","Direct","Warm"];
+const EG_TONE={
+  Friendly:{greet:["Hi {first},","Hey {first},","Hi {first} — hope you're having a good week!"],
+            sign:["Cheers,","Thanks so much,","Talk soon,","Appreciate it,"]},
+  Professional:{greet:["Dear {first},","Hello {first},","Hi {first},"],
+            sign:["Best regards,","Kind regards,","Sincerely,","Best,"]},
+  Direct:{greet:["Hi {first},","{first} —","Hey {first},"],
+            sign:["Thanks,","Best,","Appreciate your time,"]},
+  Warm:{greet:["Hi {first},","Hello {first},","Hi {first}, I hope this note finds you well —"],
+            sign:["Warm regards,","All the best,","With appreciation,","Warmly,"]}
+};
+const EG_BENEFITS=["streamline your outreach and close more deals","turn more of your leads into customers",
+  "save your team hours every week","get more out of your existing pipeline","book more qualified meetings",
+  "grow revenue without adding headcount","move deals through your pipeline faster"];
+const EG_PURPOSE={
+  "Intro":{
+    subjects:["Quick intro — {mycompany}","{mycompany} × {company}","Great to connect, {first}","An introduction from {myname}","Hello from {mycompany}"],
+    open:["I wanted to introduce myself — I'm {myname} at {mycompany}.","I've been looking forward to connecting with you at {company}.","Putting a face to the name — {myname} here, from {mycompany}.","I'm reaching out to introduce myself and what we're building at {mycompany}."],
+    value:["We help teams like {company} {benefit}. I'd love to hear what you're focused on this quarter.","At {mycompany} we help teams {benefit} — and {company} stood out as a great fit.","The teams we work with come to us to {benefit}, and I think we could do the same for {company}."],
+    cta:["Would you be open to a quick 15-minute chat this week?","Do you have time for a brief call in the next few days?","Worth a short conversation to see if there's a fit?","Mind if I send over a couple of times to connect?"]
+  },
+  "Cold outreach":{
+    subjects:["A quick idea for {company}","{first}, worth 15 minutes?","Idea for {company}","{mycompany} — quick idea for {company}","Worth a look, {first}?"],
+    open:["I'll keep this short — I think {mycompany} could genuinely help {company}.","I know a cold email is easy to ignore, so I'll be quick.","We've been helping teams {benefit}, and {company} came to mind.","Reaching out because I think there's a real opportunity for {company}."],
+    value:["Most teams we talk to are trying to {benefit} without adding overhead — that's exactly what we do.","In short: we help teams {benefit}. Happy to share a couple of examples relevant to {company}.","We've helped similar teams {benefit}, often within the first few weeks."],
+    cta:["Open to a quick look? I can send a short overview.","If it's relevant, would a 10-minute call make sense?","Want me to send over a couple of examples?","Should I share more, or is now not the right time?"]
+  },
+  "Follow-up":{
+    subjects:["Following up, {first}","Re: {mycompany} × {company}","Circling back","Quick follow-up","Still worth a chat, {first}?"],
+    open:["I wanted to follow up on {lastTouch}.","Circling back on my last note in case it slipped by.","Following up to see if you'd had a chance to think it over.","Just floating this back to the top of your inbox."],
+    value:["No pressure at all — I know things get busy. The offer to {benefit} still stands.","Happy to share more on how we help teams {benefit} whenever the timing's right.","If it's helpful, I can put together something specific to {company}."],
+    cta:["Would this week or next be better for a quick call?","Should I follow up again down the road, or is there interest now?","Want me to send a few times that work?","Is this still on your radar?"]
+  },
+  "Re-engagement":{
+    subjects:["Long time, {first}","Reconnecting — {mycompany}","Picking this back up","Still thinking of {company}","Good time to reconnect?"],
+    open:["It's been a little while since we last connected{sinceLast}.","I know it's been a while — wanted to reopen our conversation.","Reaching back out to reconnect after some time.","Circling back around after a bit of a gap."],
+    value:["A lot has changed on our side, and I think it's more relevant to {company} than ever.","We've since helped more teams {benefit}, and I'd love to catch you up.","If {benefit} is still a priority for {company}, it may be worth another look."],
+    cta:["Would you be open to picking this back up?","Worth a quick catch-up call?","Should I send over what's new?","Is now a better time than before?"]
+  },
+  "Book a call":{
+    subjects:["15 minutes this week, {first}?","Grabbing time with you","Quick call, {first}?","Let's find 15 minutes","A time to connect"],
+    open:["I'd love to find 15 minutes to talk properly.","Rather than go back and forth by email, could we grab a quick call?","I think a short call would be the fastest way to see if we can help {company}."],
+    value:["On the call I can walk you through how we help teams {benefit} — tailored to {company}.","It'd be a quick, no-pressure conversation to see if there's a fit.","I'll keep it to 15 minutes and make it worth your time."],
+    cta:["Does Tuesday or Thursday afternoon work?","What does your calendar look like this week?","Happy to work around your schedule — just name a time.","Want me to send a calendar link?"]
+  },
+  "Proposal":{
+    subjects:["Proposal for {company}","As promised — {company} proposal","Next steps for {company}","{company} × {mycompany}: proposal","Your proposal, {first}"],
+    open:["As promised, I've put together a proposal for {company}.","Following our conversation, here's a proposal tailored to {company}.","I've outlined how we'd help {company} {benefit}."],
+    value:["It covers scope, timeline, and pricing, and is built around what we discussed.","The goal is simple: {benefit}, with clear milestones along the way.","I've kept it focused on the outcomes that matter most to {company}."],
+    cta:["Happy to walk through it live — when works for you?","Take a look and let me know your thoughts?","Should we set up a time to review it together?","Any questions before we move ahead?"]
+  },
+  "Thank you":{
+    subjects:["Thank you, {first}","Great talking today","Thanks for your time","Appreciated the conversation","Thank you — next steps"],
+    open:["Thank you for taking the time to talk today.","I really enjoyed our conversation — thank you.","Thanks so much for connecting; it was great to learn about {company}."],
+    value:["I'm excited about the possibility of helping {company} {benefit}.","Based on what we discussed, I'm confident we can {benefit}.","I'll follow up shortly with the next steps we talked about."],
+    cta:["In the meantime, don't hesitate to reach out with any questions.","I'll be in touch soon — but I'm here if anything comes up.","Looking forward to what's next.","Let me know if there's anything I can send over in the meantime."]
+  }
+};
+let egState={};
+function egPick(a){return a[Math.floor(Math.random()*a.length)];}
+function egPickBut(a,prev){if(!a||!a.length)return "";if(a.length<2)return a[0];let x;let n=0;do{x=egPick(a);n++;}while(x===prev&&n<12);return x;}
+function egMerge(str,ctx){return String(str).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:"")
+  .replace(/ {2,}/g," ").replace(/ ,/g,",").replace(/ \./g,".").replace(/ —,/g," —").trim();}
+function egSettings(){
+  const key="ceasai_email_settings_"+(state.user?state.user.id:"anon");let saved={};
+  try{saved=JSON.parse(localStorage.getItem(key)||"{}");}catch(e){}
+  return {
+    name: saved.name || (state.profile&&state.profile.full_name) || (state.user?state.user.email:"") || "",
+    company: saved.company || (state.org?state.org.name:"") || "",
+    title: saved.title || "",
+    signature: saved.signature || ""
+  };
+}
+function egSaveSettings(o){
+  const key="ceasai_email_settings_"+(state.user?state.user.id:"anon");
+  try{localStorage.setItem(key,JSON.stringify(o));return true;}catch(e){toastErr(e);return false;}
+}
+function egContext(c){
+  const s=egSettings();
+  const acts=state.data.activities.filter(a=>a.contact_id===c.id);
+  const last=acts[0];
+  let lastTouch="my last note",sinceLast="";
+  if(last){const t=last.type==="email"?"email":last.type==="call"?"call":last.type==="meeting"?"conversation":(last.type||"note");
+    lastTouch="my last "+t+" "+relTime(last.occurred_at);sinceLast=" — our last "+t+" was "+relTime(last.occurred_at);}
+  return {
+    first:(c.first_name||"there"),
+    company:companyName(c.company_id)||"your company",
+    myname:s.name||"the team",
+    mycompany:s.company||"our team",
+    mytitle:s.title||"",
+    source:c.source||"",
+    benefit:egPick(EG_BENEFITS),
+    lastTouch,sinceLast
+  };
+}
+function egGenerate(){
+  const c=byId(state.data.contacts,egState.contactId);if(!c)return;
+  const ctx=egContext(c);
+  const P=EG_PURPOSE[egState.purpose]||EG_PURPOSE["Intro"];
+  const T=EG_TONE[egState.tone]||EG_TONE["Friendly"];
+  const L=egState.last||{};
+  const greet=egMerge(egPickBut(T.greet,L.greet),ctx);
+  const open=egMerge(egPickBut(P.open,L.open),ctx);
+  const value=egMerge(egPickBut(P.value,L.value),ctx);
+  const cta=egMerge(egPickBut(P.cta,L.cta),ctx);
+  const sign=egPickBut(T.sign,L.sign);
+  const subjectRaw=egPickBut(P.subjects,L.subject);
+  const subject=egMerge(subjectRaw,ctx);
+  egState.last={greet,open,value,cta,sign,subject:subjectRaw};
+  const s=egSettings();
+  const signName=s.name||ctx.myname;
+  const sig=[sign];
+  if(s.signature&&s.signature.trim()){
+    s.signature.trim().split(/\n/).forEach(l=>sig.push(egMerge(l,{name:signName,company:s.company,title:s.title})));
+  }else{
+    sig.push(signName);
+    const role=[s.title,s.company].filter(Boolean).join(", ");
+    if(role)sig.push(role);
+  }
+  const body=[greet,"",open,"",value,"",cta,"",sig.join("\n")].join("\n");
+  egState.subject=subject;egState.body=body;
+  return {subject,body};
+}
+function openEmailGen(contactId){
+  const c=byId(state.data.contacts,contactId);
+  if(!c){toast("Contact not found","err");return;}
+  egState={contactId,purpose:"Intro",tone:"Friendly",last:null};
+  egGenerate();
+  openModal("✨ Generate Email — "+contactName(c),egModalBody(),
+    [{label:"Close",cls:"ghost",act:()=>openContact(contactId)}],true);
+  egSyncPreview();
+}
+function egModalBody(){
+  return `
+  <div class="row" style="gap:16px;flex-wrap:wrap">
+    <div class="field" style="margin-bottom:10px"><label>Purpose</label>
+      <div class="eg-chips" id="eg-purpose">${EG_PURPOSES.map(p=>`<span class="eg-chip ${p===egState.purpose?"on":""}" onclick="egSet('purpose',this.textContent)">${p}</span>`).join("")}</div></div>
+    <div class="field" style="margin-bottom:10px;flex:0 0 auto"><label>Tone</label>
+      <div class="eg-chips" id="eg-tone">${EG_TONES.map(t=>`<span class="eg-chip ${t===egState.tone?"on":""}" onclick="egSet('tone',this.textContent)">${t}</span>`).join("")}</div></div>
+  </div>
+  <div class="eg-preview">
+    <label>Subject</label>
+    <input id="eg-subject" class="eg-subject" value="${esc(egState.subject)}"/>
+    <label style="margin-top:10px">Email body</label>
+    <textarea id="eg-body" class="eg-body">${esc(egState.body)}</textarea>
+    <div class="eg-meta" id="eg-meta"></div>
+  </div>
+  <div class="eg-actions">
+    <button class="btn primary" onclick="egRegenerate()">↻ Regenerate</button>
+    <button class="btn" onclick="egCopy()">⧉ Copy</button>
+    <button class="btn" onclick="egMailto()">✉ Open in email client</button>
+    <button class="btn" onclick="egLogOutreach()">✓ Log as Outreach</button>
+  </div>`;
+}
+function egSet(kind,val){
+  egState[kind]=val;egState.last=null;
+  const wrap=$("#eg-"+kind);if(wrap)wrap.querySelectorAll(".eg-chip").forEach(el=>el.classList.toggle("on",el.textContent===val));
+  egGenerate();egSyncPreview();
+}
+function egRegenerate(){egGenerate();egSyncPreview();}
+function egSyncPreview(){
+  const s=$("#eg-subject"),b=$("#eg-body");if(s)s.value=egState.subject;if(b)b.value=egState.body;
+  const c=byId(state.data.contacts,egState.contactId),m=$("#eg-meta");
+  if(m&&c){const bits=[];if(c.first_name)bits.push(c.first_name);const cn=companyName(c.company_id);if(cn)bits.push(cn);
+    if(c.title)bits.push(c.title);if(c.status)bits.push(c.status);if(c.source)bits.push("source: "+c.source);
+    if((c.tags||[]).length)bits.push("tags: "+c.tags.join(", "));
+    m.textContent="✨ Personalized with "+(bits.join(" · ")||"contact details");}
+}
+function egCurrent(){return {subject:($("#eg-subject")?$("#eg-subject").value:egState.subject),body:($("#eg-body")?$("#eg-body").value:egState.body)};}
+function egCopy(){
+  const {subject,body}=egCurrent();const text="Subject: "+subject+"\n\n"+body;
+  const done=()=>toast("Email copied to clipboard","ok");
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>egCopyFallback(text,done));}
+  else egCopyFallback(text,done);
+}
+function egCopyFallback(text,done){
+  const ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
+  document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand("copy");done();}catch(e){toastErr(e);}ta.remove();
+}
+function egMailto(){
+  const c=byId(state.data.contacts,egState.contactId);const {subject,body}=egCurrent();
+  if(!c||!c.email){toast("This contact has no email address","err");return;}
+  window.location.href="mailto:"+encodeURIComponent(c.email)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+}
+async function egLogOutreach(){
+  const c=byId(state.data.contacts,egState.contactId);if(!c)return;
+  const {subject,body}=egCurrent();
+  document.querySelectorAll(".eg-actions .btn").forEach(b=>b.disabled=true);
+  try{
+    const {error}=await sb.from("activities").insert(withOrg({contact_id:c.id,type:"email",direction:"outbound",
+      subject:subject||null,body:body||null,occurred_at:new Date().toISOString()}));
+    if(error)throw error;
+    await sb.from("tasks").insert(withOrg({title:"Follow up: "+contactName(c),type:"follow-up",due_date:addDays(3),contact_id:c.id}));
+    if(c.status==="New"){await sb.from("contacts").update({status:"Contacted",updated_at:new Date().toISOString()}).eq("id",c.id);}
+    toast("Logged as outreach ✓","ok");
+    await Promise.all([reload("activities"),reload("tasks"),reload("contacts")]);
+    renderNavBadges();
+    openContact(c.id);
+    if(state.view!=="contacts")render();
+  }catch(e){toastErr(e);document.querySelectorAll(".eg-actions .btn").forEach(b=>b.disabled=false);}
 }
 
 /* ============================================================

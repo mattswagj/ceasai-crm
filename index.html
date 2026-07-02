@@ -1288,7 +1288,7 @@ const EG_PURPOSE={
 
 /* Short, casual Instagram DM copy — pitches CeasAI, personalized, soft CTA */
 const EG_DM={
-  greet:["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first},"],
+  greet:["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first} — hope you're good!"],
   "Intro":{
     open:["love what you're doing at {company}.","been checking out {company} — really great stuff.","came across {company} and had to reach out."],
     value:["I'm with {mycompany} — we build simple AI apps for {bizType}s that capture leads and follow up + book clients for you automatically.","We help {bizType}s like yours {win} with one simple app (instant lead capture, on-brand follow-ups, one-line booking).","I build custom AI that takes {industryHook} off your plate so you can {win}."],
@@ -1403,7 +1403,8 @@ function egGenerateDM(){
   const D=EG_DM[egState.purpose]||EG_DM["Intro"];
   const L=egState.last||{};
   const greet=egMerge(egPickBut(EG_DM.greet,L.greet),ctx);
-  const open=egMerge(egPickBut(D.open,L.open),ctx);
+  let open=egMerge(egPickBut(D.open,L.open),ctx);
+  open=open.charAt(0).toUpperCase()+open.slice(1);
   const value=egMerge(egPickBut(D.value,L.value),ctx);
   const cta=egMerge(egPickBut(D.cta,L.cta),ctx);
   egState.last={greet,open,value,cta};

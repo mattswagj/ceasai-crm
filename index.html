@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0e0f13" />
 <title>CeasAI CRM</title>
-<!-- v3.0: analytics dashboard + lead pipeline + follow-up flow + bulk email (Resend) + Hunter enrichment + mobile-first -->
+<!-- v3.0: analytics dashboard + lead pipeline + follow-up flow + bulk email (ProtiqAI SMTP) + Hunter enrichment + mobile-first -->
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e0f13'/%3E%3Ctext x='32' y='44' font-size='34' font-family='Georgia' font-weight='bold' text-anchor='middle' fill='%23d4af37'%3EC%3C/text%3E%3C/svg%3E" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -408,6 +408,7 @@ const NAV = [
   {id:"dashboard",label:"Dashboard",ic:"◧",m:1},
   {id:"pipeline",label:"Pipeline",ic:"≣",m:1},
   {id:"outreach",label:"Outreach",ic:"✉",m:1},
+  {id:"daily",label:"Daily",ic:"⚡",m:1},
   {id:"campaigns",label:"Campaigns",ic:"📣",m:1},
   {id:"contacts",label:"Leads",ic:"◔",m:1},
   {id:"deals",label:"Deals",ic:"⛁"},
@@ -603,6 +604,7 @@ function quickNew(){
   else if(v==="deals")editDeal();
   else if(v==="tasks")editTask();
   else if(v==="campaigns")newCampaign();
+  else if(v==="daily")openDailyQueue();
   else editContact();
 }
 const onGlobalSearch=debounce(v=>{
@@ -616,7 +618,7 @@ const onGlobalSearch=debounce(v=>{
 function render(){
   const v=$("#view");
   ({dashboard:renderDashboard,pipeline:renderPipeline,contacts:renderContacts,companies:renderCompanies,
-    deals:renderDeals,tasks:renderTasks,outreach:renderOutreach,campaigns:renderCampaigns,settings:renderSettings}[state.view]||renderDashboard)(v);
+    deals:renderDeals,tasks:renderTasks,outreach:renderOutreach,campaigns:renderCampaigns,daily:renderDaily,settings:renderSettings}[state.view]||renderDashboard)(v);
 }
 
 /* ============================================================
@@ -1535,7 +1537,7 @@ async function delTemplate(id){
 /* ============================================================
    CAMPAIGNS (bulk email) + ENRICHMENT
 ============================================================ */
-function providerReady(){return !!(state.org&&state.org.email_provider==="resend"&&state.org.from_email&&state.org.mailing_address);}
+function providerReady(){return !!(state.org&&state.org.email_provider==="smtp"&&state.org.from_email&&state.org.mailing_address);}
 function allTags(){const s=new Set();state.data.contacts.forEach(c=>(c.tags||[]).forEach(t=>t&&s.add(t)));return [...s].sort();}
 function campaignBase(f){
   let list=state.data.contacts.slice();
@@ -1555,7 +1557,7 @@ function campaignEligible(f){
 }
 function mergeClient(tpl,c){
   const map={first_name:c.first_name||"there",first:c.first_name||"there",last_name:c.last_name||"",
-    name:contactName(c),company:companyName(c.company_id)||"your business",title:c.title||"",email:c.email||""};
+    name:contactName(c),company:companyName(c.company_id)||"your business",business:companyName(c.company_id)||"your business",city:c.city||"your area",title:c.title||"",email:c.email||""};
   return String(tpl||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);
 }
 function renderCampaigns(v){
@@ -1564,8 +1566,8 @@ function renderCampaigns(v){
   const sentTotal=E.filter(e=>e.status==="sent").length;
   const missing=state.data.contacts.filter(c=>!c.email&&c.company_id&&!c.unsubscribed).length;
   const banner=ready
-    ?`<div class="banner info">✅ Resend connected · from <b>${esc(state.org.from_email)}</b> · cap ${state.org.daily_cap||100}/day</div>`
-    :`<div class="banner warn">⚠ No email provider connected. Build & preview campaigns now — sends are <b>queued</b> (nothing is sent) until you add a Resend key + from-address in <a onclick="navigate('settings')" style="cursor:pointer;text-decoration:underline">Settings</a>.</div>`;
+    ?`<div class="banner info">✅ ProtiqAI SMTP connected · from <b>${esc(state.org.from_email)}</b> · cap ${state.org.daily_cap||100}/day</div>`
+    :`<div class="banner warn">⚠ No email provider connected. Build & preview campaigns now — sends are <b>queued</b> (nothing is sent) until you connect ProtiqAI SMTP in <a onclick="navigate('settings')" style="cursor:pointer;text-decoration:underline">Settings</a>.</div>`;
   v.innerHTML=banner+`
   <div class="toolbar">
     <button class="btn primary" onclick="newCampaign()">📣 New campaign</button>
@@ -1658,7 +1660,7 @@ function campaignPreview(){
       <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
       <div class="muted" style="font-size:11px">— ${esc((state.org&&(state.org.from_name||state.org.name))||"CeasAI")}${state.org&&state.org.mailing_address?"<br>"+esc(state.org.mailing_address):'<br><span style="color:var(--amber)">⚠ add a mailing address in Settings (legally required)</span>'}<br>Unsubscribe link appended automatically to every message</div>
     </div>
-    <div class="banner ${ready?'info':'warn'}" style="margin-top:12px">${ready?('Sends via Resend, paced ~1/sec, up to your '+((state.org&&state.org.daily_cap)||100)+'/day cap.'+(el.unsub?' '+el.unsub+' unsubscribed contacts are skipped.':'')):'No provider connected — this saves as a <b>queued</b> campaign. Nothing is sent until you add your Resend key in Settings.'}</div>
+    <div class="banner ${ready?'info':'warn'}" style="margin-top:12px">${ready?('Sends via ProtiqAI SMTP, paced ~1/sec, up to your '+((state.org&&state.org.daily_cap)||100)+'/day cap.'+(el.unsub?' '+el.unsub+' unsubscribed contacts are skipped.':'')):'No provider connected — this saves as a <b>queued</b> campaign. Nothing is sent until you connect ProtiqAI SMTP in Settings.'}</div>
   `,[{label:"← Back",cls:"ghost",act:openCampaignCompose},{label:sendLabel,cls:"primary",act:campaignSend}],true);
 }
 async function campaignSend(){
@@ -1674,21 +1676,160 @@ async function campaignSend(){
     if(ce)throw ce;
     if(!ready){
       const rows=ids.map(id=>{const c=byId(state.data.contacts,id);
-        return withOrg({campaign_id:camp.id,contact_id:id,to_email:c.email,subject:mergeClient(cmpDraft.subject,c),status:"queued",provider:null});});
+        return withOrg({campaign_id:camp.id,contact_id:id,to_email:c.email,subject:mergeClient(cmpDraft.subject,c),status:"queued",provider:null,channel:"email"});});
       await sb.from("email_events").insert(rows);
-      toast("Campaign queued ("+ids.length+"). Connect Resend to send.","ok");
+      toast("Campaign queued ("+ids.length+"). Connect ProtiqAI SMTP to send.","ok");
       closeModal();await Promise.all([reload("campaigns"),reload("emailEvents")]);renderNavBadges();render();return;
     }
     toast("Sending "+ids.length+"… keep this open","ok");
     const {data,error}=await sb.functions.invoke("send-campaign",{body:{campaign_id:camp.id,contact_ids:ids,subject:cmpDraft.subject,body:cmpDraft.body,template_id:cmpDraft.templateId||null}});
     if(error)throw error;
-    if(data&&data.reason==="no_provider")toast("Provider key not set server-side — saved as queued","err");
+    if(data&&data.reason==="no_provider")toast("SMTP secrets not set server-side — saved as queued","err");
     else if(data&&data.reason==="no_address")toast("Add a mailing address in Settings first","err");
+    else if(data&&data.reason==="smtp_connect_failed")toast("SMTP connection failed - check host/port","err");
     else if(data&&data.ok)toast(`Sent ${data.sent} · failed ${data.failed} · ${data.skipped_suppressed} suppressed`,"ok");
     else toast((data&&data.message)||"Send failed","err");
     closeModal();await Promise.all([reload("campaigns"),reload("emailEvents"),reload("contacts")]);renderNavBadges();render();
   }catch(e){toastErr(e);document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=false);}
 }
+/* ============================================================
+   DAILY EMAIL QUEUE (Phase 4) - up to daily_cap eligible gym
+   businesses/day, one email per business, via ProtiqAI SMTP.
+============================================================ */
+const DAILY_DEFAULT={
+  subject:"Quick question about {{business}}",
+  body:"Hi {{first_name}},\n\nI came across {{business}} and love what you're building in {{city}}. I run CeasAI - we help gyms turn more inquiries into paying members with AI that answers leads and follows up 24/7, so nothing slips through the cracks.\n\nWould you be open to a 2-minute look at how it could work for {{business}}?\n\nThanks,"
+};
+let dqDraft={subject:DAILY_DEFAULT.subject,body:DAILY_DEFAULT.body};
+
+function dqEmailable(){
+  return state.data.contacts.filter(c=>c.email&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");
+}
+// Today's queue: eligible = never-emailed OR follow-up due; deduped one per business;
+// businesses already emailed today are skipped; capped at daily_cap.
+function dailyQueueEligible(){
+  const cap=(state.org&&state.org.daily_cap)||100;
+  const today=new Date().toISOString().slice(0,10);
+  const E=state.data.emailEvents||[];
+  const sentTodayCompanies=new Set();
+  E.forEach(e=>{if(e.status==="sent"&&e.sent_at&&e.sent_at.slice(0,10)===today){const c=byId(state.data.contacts,e.contact_id);if(c&&c.company_id)sentTodayCompanies.add(c.company_id);}});
+  const eligible=dqEmailable().filter(c=>{
+    const never=!c.last_emailed_at;
+    const due=c.next_followup_at&&c.next_followup_at<=today;
+    return never||due;
+  });
+  eligible.sort((a,b)=>{
+    const ad=(a.next_followup_at&&a.next_followup_at<=today)?0:1;
+    const bd=(b.next_followup_at&&b.next_followup_at<=today)?0:1;
+    if(ad!==bd)return ad-bd;
+    return (a.created_at||"").localeCompare(b.created_at||"");
+  });
+  const seen=new Set(),pick=[];
+  for(const c of eligible){
+    const comp=c.company_id||("__nc_"+c.id);
+    if(seen.has(comp))continue;
+    if(c.company_id&&sentTodayCompanies.has(c.company_id))continue;
+    seen.add(comp);pick.push(c);
+    if(pick.length>=cap)break;
+  }
+  return pick;
+}
+function dailyReport(){
+  const today=new Date().toISOString().slice(0,10);
+  const E=state.data.emailEvents||[];
+  const isToday=x=>x&&x.slice(0,10)===today;
+  const sent=E.filter(e=>e.status==="sent"&&isToday(e.sent_at)).length;
+  const failed=E.filter(e=>e.status==="failed"&&isToday(e.created_at)).length;
+  const queued=E.filter(e=>e.status==="queued"&&isToday(e.created_at)).length;
+  const remaining=new Set();
+  dqEmailable().forEach(c=>{if(!c.last_emailed_at)remaining.add(c.company_id||("__nc_"+c.id));});
+  return {sent,failed,queued,remaining:remaining.size,queueSize:dailyQueueEligible().length};
+}
+function renderDaily(v){
+  const ready=providerReady();
+  const r=dailyReport();
+  const cap=(state.org&&state.org.daily_cap)||100;
+  const pick=dailyQueueEligible();
+  const banner=ready
+    ?`<div class="banner info">✅ ProtiqAI SMTP connected · from <b>${esc((state.org&&state.org.from_email)||"")}</b> · cap ${cap}/day</div>`
+    :`<div class="banner warn">⚠ Preview mode - build today's queue now, but <b>nothing sends</b> until you connect ProtiqAI SMTP (paste SMTP secrets in Supabase + set provider in <a onclick="navigate('settings')" style="cursor:pointer;text-decoration:underline">Settings</a>).</div>`;
+  v.innerHTML=banner+`
+  <div class="toolbar">
+    <button class="btn primary" onclick="openDailyQueue()" ${pick.length?"":"disabled"}>⚡ Generate today's queue (${pick.length})</button>
+    <div class="spacer"></div>
+    <span class="muted" style="font-size:12.5px">${ready?"Sends via ProtiqAI SMTP":"Queue / preview only"}</span>
+  </div>
+  <div class="grid cards" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-bottom:14px">
+    ${stat("Queue today",r.queueSize,"⚡","eligible")}
+    ${stat("Sent today",r.sent,"✓","")}
+    ${stat("Failed today",r.failed,"⚠","retry")}
+    ${stat("Queued today",r.queued,"⏳","await SMTP")}
+    ${stat("Left",r.remaining,"◔","never emailed")}
+  </div>
+  <div class="panel">
+    <h3>Today's queue preview <span class="sub">· ${pick.length} business${pick.length===1?"":"es"}, one per company</span></h3>
+    ${pick.length?`<table class="cardify"><thead><tr><th>Business</th><th>To</th><th>Contact</th></tr></thead><tbody>
+      ${pick.slice(0,cap).map(c=>`<tr>
+        <td data-label="Business"><div class="cell-main">${esc(companyName(c.company_id)||"-")}</div></td>
+        <td data-label="To" class="cell-sub">${esc(c.email||"")}</td>
+        <td data-label="Contact" class="cell-sub">${esc(contactName(c))}</td>
+      </tr>`).join("")}</tbody></table>`:emptyBox("All caught up","No eligible businesses today - each has been emailed or needs an email address. Enrich leads from the Campaigns tab.")}
+  </div>`;
+}
+function openDailyQueue(){
+  const pick=dailyQueueEligible();
+  if(!pick.length)return toast("No eligible businesses today","ok");
+  state._dqPick=pick.map(c=>c.id);
+  openModal("⚡ Today's email queue — "+pick.length+" businesses",`
+    <div class="banner ${providerReady()?'info':'warn'}" style="margin-bottom:10px">${providerReady()?'Ready to send via ProtiqAI SMTP.':'Preview mode - this will queue (nothing sends) until ProtiqAI SMTP is connected.'}</div>
+    <div class="field"><label>Subject</label><input id="dq-subj" value="${esc(dqDraft.subject)}"/></div>
+    <div class="field"><label>Message</label><textarea id="dq-body" style="min-height:180px">${esc(dqDraft.body)}</textarea></div>
+    <p class="muted" style="font-size:11.5px;margin:0">Merge fields: <b>{{first_name}}</b>, <b>{{business}}</b>, <b>{{city}}</b>, <b>{{title}}</b>. Unsubscribe link + mailing address are appended automatically. One email per business; unsubscribed / bounced are skipped.</p>
+  `,[{label:"Cancel",cls:"ghost",act:closeModal},{label:"Preview →",cls:"primary",act:dailyQueuePreview}],true);
+}
+function dailyQueuePreview(){
+  dqDraft.subject=$("#dq-subj").value;dqDraft.body=$("#dq-body").value;
+  const ids=state._dqPick||[];if(!ids.length)return;
+  const c=byId(state.data.contacts,ids[0]);
+  const ready=providerReady();
+  openModal("Preview — "+ids.length+" recipients",`
+    <div class="field"><label>Subject</label><div>${esc(mergeClient(dqDraft.subject,c))}</div></div>
+    <div class="field"><label>First recipient</label><div class="cell-sub">${esc(c.email||"")} · ${esc(companyName(c.company_id)||"")}</div></div>
+    <div class="field"><label>Message</label><div class="tb" style="white-space:pre-wrap;max-height:200px;overflow:auto">${esc(mergeClient(dqDraft.body,c))}</div></div>
+    <div class="muted" style="font-size:11px">— ${esc((state.org&&(state.org.from_name||state.org.name))||"CeasAI")}${state.org&&state.org.mailing_address?"<br>"+esc(state.org.mailing_address):'<br><span style="color:var(--amber)">⚠ add a mailing address in Settings (legally required)</span>'}<br>Unsubscribe link appended automatically</div>
+    <div class="banner ${ready?'info':'warn'}" style="margin-top:12px">${ready?('Sends via ProtiqAI SMTP, paced ~1/sec, up to your '+cap()+'/day cap.'):'No provider connected - saved as a <b>queued</b> batch. Nothing is sent until you connect ProtiqAI SMTP in Settings.'}</div>
+  `,[{label:"← Back",cls:"ghost",act:openDailyQueue},{label:ready?("Send to "+ids.length+" →"):("Queue "+ids.length),cls:"primary",act:dailyQueueSend}],true);
+  function cap(){return (state.org&&state.org.daily_cap)||100;}
+}
+async function dailyQueueSend(){
+  const ids=state._dqPick||[];if(!ids.length){toast("No recipients","err");return;}
+  const ready=providerReady();
+  document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=true);
+  try{
+    const name="Daily Queue — "+new Date().toISOString().slice(0,10);
+    const {data:camp,error:ce}=await sb.from("campaigns").insert(withOrg({
+      name,subject:dqDraft.subject,body:dqDraft.body,total:ids.length,
+      status:ready?"queued":"draft",daily_cap:(state.org&&state.org.daily_cap)||100})).select().single();
+    if(ce)throw ce;
+    if(!ready){
+      const rows=ids.map(id=>{const c=byId(state.data.contacts,id);
+        return withOrg({campaign_id:camp.id,contact_id:id,to_email:c.email,subject:mergeClient(dqDraft.subject,c),status:"queued",provider:null,channel:"email",personalization:{first_name:c.first_name,business:companyName(c.company_id),city:c.city||null}});});
+      await sb.from("email_events").insert(rows);
+      toast("Queued "+ids.length+" business"+(ids.length===1?"":"es")+". Connect ProtiqAI SMTP to send.","ok");
+      closeModal();await Promise.all([reload("campaigns"),reload("emailEvents")]);renderNavBadges();render();return;
+    }
+    toast("Sending "+ids.length+"… keep this open","ok");
+    const {data,error}=await sb.functions.invoke("send-campaign",{body:{campaign_id:camp.id,contact_ids:ids,subject:dqDraft.subject,body:dqDraft.body}});
+    if(error)throw error;
+    if(data&&data.reason==="no_provider")toast("SMTP secrets not set server-side — saved as queued","err");
+    else if(data&&data.reason==="no_address")toast("Add a mailing address in Settings first","err");
+    else if(data&&data.reason==="smtp_connect_failed")toast("SMTP connection failed - check host/port. See report.","err");
+    else if(data&&data.ok)toast("Sent "+data.sent+" · failed "+data.failed+" · "+data.skipped_suppressed+" suppressed","ok");
+    else toast((data&&data.message)||"Send failed","err");
+    closeModal();await Promise.all([reload("campaigns"),reload("emailEvents"),reload("contacts")]);renderNavBadges();render();
+  }catch(e){toastErr(e);document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=false);}
+}
+
 /* ---- Hunter.io enrichment ---- */
 async function enrichLeads(ids){
   if(!ids||!ids.length)return;
@@ -1730,8 +1871,8 @@ function renderSettings(v){
       <p class="muted" style="font-size:11.5px;margin:10px 0 0">Defaults to your profile name and workspace. Stored on this device.</p>
     </div>
     <div class="panel" style="margin-bottom:14px">
-      <h3>📣 Bulk email sending <span class="sub">· Resend</span></h3>
-      <div class="banner ${providerReady()?'info':'warn'}" style="margin-bottom:12px">${providerReady()?'✅ Connected — campaigns will send via Resend.':'Not connected. Add the fields below, deploy the edge function, and set the RESEND_API_KEY secret (see report). Until then, campaigns queue without sending.'}</div>
+      <h3>📣 Bulk email sending <span class="sub">· ProtiqAI SMTP</span></h3>
+      <div class="banner ${providerReady()?'info':'warn'}" style="margin-bottom:12px">${providerReady()?'✅ Connected — campaigns will send via ProtiqAI SMTP.':'Not connected. Add the fields below, deploy the edge function, and set the SMTP_HOST/PORT/USER/PASS/FROM secrets (see report). Until then, campaigns queue without sending.'}</div>
       <div class="row"><div class="field"><label>From name</label><input id="s-fromname" value="${esc(state.org&&state.org.from_name||"")}" placeholder="CeasAI"/></div>
         <div class="field"><label>From email (on your verified domain)</label><input id="s-fromemail" value="${esc(state.org&&state.org.from_email||"")}" placeholder="matt@ceasai.com"/></div></div>
       <div class="row"><div class="field"><label>Reply-to (optional)</label><input id="s-replyto" value="${esc(state.org&&state.org.reply_to||"")}" placeholder="matt@ceasai.com"/></div>
@@ -1739,9 +1880,9 @@ function renderSettings(v){
       <div class="field"><label>Mailing address (required by law — shown in every email)</label><input id="s-address" value="${esc(state.org&&state.org.mailing_address||"")}" placeholder="123 Main St, City, ST 00000"/></div>
       <div class="field"><label>Provider</label><select id="s-provider">
         <option value="" ${!(state.org&&state.org.email_provider)?"selected":""}>Not connected (queue only)</option>
-        <option value="resend" ${state.org&&state.org.email_provider==="resend"?"selected":""}>Resend (edge function deployed + key set)</option></select></div>
+        <option value="smtp" ${state.org&&state.org.email_provider==="smtp"?"selected":""}>ProtiqAI SMTP (edge function deployed + secrets set)</option></select></div>
       <button class="btn primary" onclick="saveEmailProvider()">Save sending settings</button>
-      <p class="muted" style="font-size:11.5px;margin:10px 0 0">The Resend API key is <b>never</b> stored here — it lives only as a Supabase secret used by the edge function.</p>
+      <p class="muted" style="font-size:11.5px;margin:10px 0 0">Your SMTP password is <b>never</b> stored here — it lives only as Supabase secrets used by the edge function.</p>
     </div>
     <div class="panel" style="margin-bottom:14px">
       <h3>🔎 Lead enrichment <span class="sub">· Hunter.io</span></h3>

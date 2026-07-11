@@ -210,10 +210,17 @@ async function boot(){
   navigate(state.view);
 }
 async function loadAll(){
-  const {data:c,error}=await sb.from("contacts").select("*").order("updated_at",{ascending:false}).limit(6000);
-  if(error)toastErr(error);
-  state.contacts=c||[];
-  state.metrics.inbound=state.contacts.filter(isInbound).length;
+  // PostgREST caps each response (~1000 rows), so page through with range().
+  let all=[], from=0; const page=1000;
+  for(let guard=0; guard<40; guard++){
+    const {data,error}=await sb.from("contacts").select("*").order("updated_at",{ascending:false}).range(from,from+page-1);
+    if(error){toastErr(error);break;}
+    all=all.concat(data||[]);
+    if(!data||data.length<page)break;
+    from+=page;
+  }
+  state.contacts=all;
+  state.metrics.inbound=all.filter(isInbound).length;
   await loadMetrics();
 }
 async function loadMetrics(){

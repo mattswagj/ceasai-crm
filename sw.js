@@ -1,5 +1,5 @@
 /* CeasAI CRM service worker — offline app shell */
-const CACHE = "ceasai-crm-v7";
+const CACHE = "ceasai-crm-v8";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", (e) => {

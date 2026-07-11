@@ -90,7 +90,27 @@ label{display:block;font-size:12.5px;color:var(--mut);margin:0 0 6px 2px;font-we
 @media(min-width:640px){.modal{align-items:center}.modal .sheet{border-radius:20px}}
 .spin{display:inline-block;width:16px;height:16px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-</style></head>
+</style><style>
+.seg{display:flex;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:5px;overflow-x:auto}
+.seg button{flex:1;white-space:nowrap;border:none;background:transparent;color:var(--mut);font-weight:700;
+  font-size:13px;padding:9px 10px;border-radius:9px;cursor:pointer}
+.seg button.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.rtable{width:100%;border-collapse:collapse;font-size:13px}
+.rtable th{text-align:right;color:var(--mut);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 6px;border-bottom:1px solid var(--line)}
+.rtable th:first-child,.rtable td:first-child{text-align:left}
+.rtable td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:700}
+.rtable td.ch{color:var(--txt)} .rtable tr:last-child td{border:none}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800}
+.pill.g{background:#0b2c1f;color:var(--good)} .pill.y{background:#2a220a;color:var(--warn)} .pill.r{background:#3a0d14;color:var(--bad)}
+.acct{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;background:var(--panel2)}
+.acct.on{border-color:var(--accent)}
+.acct .lbl{font-weight:800;font-size:14px}.acct .id{color:var(--mut);font-size:12px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--line);flex:none}.dot.on{background:var(--good)}
+.metric.mt .n{color:#ffd36b}
+.alert{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);margin-bottom:8px;font-size:13.5px}
+.alert .ai{font-size:18px;flex:none}
+</style>
+</head>
 <body>
 
 <!-- ============ AUTH ============ -->
@@ -127,8 +147,6 @@ const SUPABASE_ANON_KEY = "sb_publishable__u2lblfYFekZgYJknH3PtQ_J20vGVF9";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const BIZ_TYPES = ["Gym","CrossFit","MMA / Boxing","Yoga / Pilates","Personal Training","Boutique Studio","Wellness / Spa","Other"];
-// Template B — "quick question" single-question email. {{title}} = business name
-// (the send-campaign edge fn merges c.title), {{city}} = the lead's city.
 const TEMPLATE_B = {
   subject: "quick question about {{title}}",
   body: `Hi there,
@@ -139,15 +157,23 @@ I build simple AI tools for {{city}} fitness & wellness businesses that capture 
 
 Worth a quick look?`
 };
+// channel keys logged in email_events.channel
+const CH = {
+  email:{label:"Email",ic:"✉️"}, instagram_dm:{label:"Instagram",ic:"📷"},
+  sms:{label:"SMS",ic:"💬",warmOnly:true}, linkedin:{label:"LinkedIn",ic:"in"},
+  call:{label:"Call",ic:"☎️"}, meeting:{label:"Meeting",ic:"📅"},
+};
+const OUT_CHANNELS = ["email","instagram_dm","sms","linkedin","call"];
 
 /* ============ STATE ============ */
 const state = {
   user:null, profile:null, org:null,
   view:"dashboard",
-  contacts:[],
-  metrics:{emails:0, dms:0, responses:0, inbound:0},
+  contacts:[], events:[],
+  metrics:{},
   segment:{type:"", state:"", hasEmail:false, warm:false},
-  dm:{queue:[], idx:0, text:"", _sig:""},
+  outCh:"email",
+  q:{queue:[], idx:0, text:"", _sig:""}, // shared queue for IG/LinkedIn/SMS
 };
 
 /* ============ HELPERS ============ */
@@ -157,22 +183,43 @@ function toast(m,cls=""){let t=document.createElement("div");t.className="toast 
   document.body.appendChild(t);setTimeout(()=>t.remove(),2600);}
 function toastErr(e){toast((e&&e.message)||String(e),"err");}
 function num(n){return (n||0).toLocaleString();}
+function pct(a,b){return b>0?Math.round(a/b*100):0;}
 function pick(a){return a[Math.floor(Math.random()*a.length)];}
 function lsKey(k){return "ceasai_"+k+"_"+(state.user?state.user.id:"anon");}
 function igClean(v){return String(v||"").trim().replace(/^@+/,"").replace(/^https?:\/\/(www\.)?instagram\.com\//i,"").replace(/[/?#].*$/,"");}
-// Structured fields are encoded as prefixed tags so NO schema change is needed:
-//   biz:<Type>  st:<ST>  ig:<handle>   (business name lives in contacts.title)
 function tagVal(c,pre){const t=(c.tags||[]).find(x=>String(x).indexOf(pre)===0);return t?t.slice(pre.length):"";}
 function bizType(c){return tagVal(c,"biz:")||"Other";}
 function stOf(c){return (tagVal(c,"st:")||"").toUpperCase();}
 function igOf(c){return igClean(tagVal(c,"ig:")||c.instagram||"");}
 function dispName(c){return c.title||((c.first_name||"")+" "+(c.last_name||"")).trim()||"—";}
 function isInbound(c){return String(c&&c.source||"").indexOf("IG keyword")===0;}
+function isWarm(c){return isInbound(c)||c.status==="Replied"||c.status==="Meeting";}
 function hasEmail(c){return !!(c.email&&c.email.includes("@"));}
+function daysAgo(ts){if(!ts)return null;return Math.floor((Date.now()-new Date(ts).getTime())/86400000);}
+/* templates + counters (client-side, no schema change) */
 function tplGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("tplB")));if(v&&v.subject)return v;}catch(e){}return {...TEMPLATE_B};}
 function tplSet(o){try{localStorage.setItem(lsKey("tplB"),JSON.stringify(o));}catch(e){}}
-function respGet(){try{return parseInt(localStorage.getItem(lsKey("responses")))||0;}catch(e){return 0;}}
-function respSet(n){try{localStorage.setItem(lsKey("responses"),String(Math.max(0,n)));}catch(e){}}
+/* accounts (multi-account rotation) */
+function acctAll(){try{const v=JSON.parse(localStorage.getItem(lsKey("accts")));if(v)return v;}catch(e){}
+  return {email:[],instagram:[],sms:[],linkedin:[],active:{},booking:""};}
+function acctSave(o){try{localStorage.setItem(lsKey("accts"),JSON.stringify(o));}catch(e){}}
+function acctList(ch){return acctAll()[ch]||[];}
+function acctActive(ch){const a=acctAll();const id=a.active&&a.active[ch];return (a[ch]||[]).find(x=>x.id===id)||(a[ch]||[])[0]||null;}
+function bookingUrl(){return acctAll().booking||"";}
+
+/* ============ EVENT LOG (all channels) ============ */
+async function logEvent(channel, contactId, status, extra){
+  const now=new Date().toISOString();
+  const row={org_id:state.org.id, contact_id:contactId||null, channel, status,
+    subject:(extra&&extra.subject)||CH[channel].label, provider:(extra&&extra.provider)||"manual",
+    to_email:(extra&&extra.to_email)||null, completed_by:state.user.email,
+    sent_at:(status==="sent"?now:null), personalization:extra||{}};
+  const {data,error}=await sb.from("email_events").insert(row).select().maybeSingle();
+  if(error){toastErr(error);return null;}
+  if(data)state.events.unshift(data);
+  computeMetrics();
+  return data;
+}
 
 /* ============ AUTH ============ */
 async function doAuth(ev){
@@ -180,14 +227,8 @@ async function doAuth(ev){
   const email=$("#a-email").value.trim(), pass=$("#a-pass").value;
   const btn=$("#a-submit");btn.disabled=true;const o=btn.textContent;btn.textContent="Please wait…";
   const msg=$("#auth-msg");msg.innerHTML="";
-  try{
-    const {error}=await sb.auth.signInWithPassword({email,password:pass});
-    if(error)throw error;
-    await boot();
-  }catch(e){
-    msg.innerHTML='<div class="banner warn">'+esc(e.message||"Sign-in failed")+'</div>';
-    btn.disabled=false;btn.textContent=o;
-  }
+  try{const {error}=await sb.auth.signInWithPassword({email,password:pass});if(error)throw error;await boot();}
+  catch(e){msg.innerHTML='<div class="banner warn">'+esc(e.message||"Sign-in failed")+'</div>';btn.disabled=false;btn.textContent=o;}
   return false;
 }
 async function signOut(){await sb.auth.signOut();location.reload();}
@@ -201,138 +242,162 @@ async function boot(){
   let {data:prof}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();
   if(!prof){await new Promise(r=>setTimeout(r,900));({data:prof}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle());}
   state.profile=prof||{email:user.email,org_id:null};
-  if(state.profile.org_id){
-    const {data:org}=await sb.from("orgs").select("*").eq("id",state.profile.org_id).maybeSingle();
-    state.org=org;
-  }
+  if(state.profile.org_id){const {data:org}=await sb.from("orgs").select("*").eq("id",state.profile.org_id).maybeSingle();state.org=org;}
   $("#auth").classList.add("hide");$("#app").classList.remove("hide");
   await loadAll();
+  checkAlerts();
   navigate(state.view);
 }
 async function loadAll(){
-  // PostgREST caps each response (~1000 rows), so page through with range().
   let all=[], from=0; const page=1000;
-  for(let guard=0; guard<40; guard++){
+  for(let g=0;g<40;g++){
     const {data,error}=await sb.from("contacts").select("*").order("updated_at",{ascending:false}).range(from,from+page-1);
     if(error){toastErr(error);break;}
     all=all.concat(data||[]);
-    if(!data||data.length<page)break;
-    from+=page;
+    if(!data||data.length<page)break; from+=page;
   }
   state.contacts=all;
-  state.metrics.inbound=all.filter(isInbound).length;
-  await loadMetrics();
+  const {data:ev}=await sb.from("email_events").select("*").order("created_at",{ascending:false}).limit(5000);
+  state.events=ev||[];
+  computeMetrics();
 }
-async function loadMetrics(){
-  try{
-    const em=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");
-    const dm=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","instagram_dm").eq("status","sent");
-    state.metrics.emails=em.count||0;
-    state.metrics.dms=dm.count||0;
-  }catch(e){}
-  state.metrics.responses=respGet();
+function computeMetrics(){
+  const sentBy={}, repBy={}; let meetings=0;
+  OUT_CHANNELS.forEach(c=>{sentBy[c]=0;repBy[c]=0;});
+  state.events.forEach(e=>{
+    if(e.channel==="meeting"){meetings++;return;}
+    if(!(e.channel in sentBy))return;
+    if(e.status==="sent")sentBy[e.channel]++;
+    else if(e.status==="replied")repBy[e.channel]++;
+  });
+  const inbound=state.contacts.filter(isInbound).length;
+  const totalRep=OUT_CHANNELS.reduce((a,c)=>a+repBy[c],0);
+  state.metrics={sentBy,repBy,meetings,inbound,
+    emails:sentBy.email, dms:sentBy.instagram_dm,
+    responses:totalRep+inbound};
 }
 
 /* ============ NAV ============ */
 const TABS=[
-  {id:"dashboard",ic:"📊",label:"Dashboard"},
+  {id:"dashboard",ic:"📊",label:"Home"},
   {id:"leads",ic:"🎯",label:"Leads"},
-  {id:"email",ic:"✉️",label:"Email"},
-  {id:"dm",ic:"📷",label:"IG DM"},
+  {id:"outreach",ic:"🚀",label:"Outreach"},
+  {id:"accounts",ic:"👤",label:"Accounts"},
   {id:"settings",ic:"⚙️",label:"Settings"},
 ];
 function navigate(v){state.view=v;renderNav();render();window.scrollTo(0,0);}
-function renderNav(){
-  $("#nav").innerHTML=TABS.map(t=>`<button class="${state.view===t.id?'on':''}" onclick="navigate('${t.id}')">
-    <span class="ic">${t.ic}</span>${t.label}</button>`).join("");
-}
+function renderNav(){$("#nav").innerHTML=TABS.map(t=>`<button class="${state.view===t.id?'on':''}" onclick="navigate('${t.id}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("");}
 function render(){
   const v=$("#view");
-  if(state.view==="dashboard")v.innerHTML=viewDashboard();
-  else if(state.view==="leads")v.innerHTML=viewLeads();
-  else if(state.view==="email")v.innerHTML=viewEmail();
-  else if(state.view==="dm")v.innerHTML=viewDM();
-  else if(state.view==="settings")v.innerHTML=viewSettings();
+  const map={dashboard:viewDashboard,leads:viewLeads,outreach:viewOutreach,accounts:viewAccounts,settings:viewSettings};
+  v.innerHTML=(map[state.view]||viewDashboard)();
 }
 
 /* ============ SEGMENT ============ */
-function segFilter(list){
-  const s=state.segment;
-  return list.filter(c=>{
-    if(s.type && bizType(c)!==s.type)return false;
-    if(s.state && stOf(c)!==s.state.toUpperCase())return false;
-    if(s.hasEmail && !hasEmail(c))return false;
-    if(s.warm && !isInbound(c))return false;
-    return true;
-  });
-}
+function segFilter(list){const s=state.segment;return list.filter(c=>{
+  if(s.type && bizType(c)!==s.type)return false;
+  if(s.state && stOf(c)!==s.state.toUpperCase())return false;
+  if(s.hasEmail && !hasEmail(c))return false;
+  if(s.warm && !isWarm(c))return false;
+  return true;});}
 function emailable(list){return list.filter(c=>hasEmail(c)&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");}
 function withIG(list){return list.filter(c=>igOf(c));}
-function segLabel(){
-  const s=state.segment;const p=[];
-  if(s.warm)p.push("Warm inbound"); p.push(s.type||"All types");
-  if(s.state)p.push(s.state.toUpperCase()); if(s.hasEmail)p.push("has email");
-  return p.join(" · ");
-}
+function segLabel(){const s=state.segment;const p=[];if(s.warm)p.push("Warm");p.push(s.type||"All types");if(s.state)p.push(s.state.toUpperCase());if(s.hasEmail)p.push("has email");return p.join(" · ");}
 function statesList(){return [...new Set(state.contacts.map(stOf).filter(Boolean))].sort();}
 function setSeg(k,v){state.segment[k]=v;render();}
 function toggleSeg(k){state.segment[k]=!state.segment[k];render();}
 function viewWarm(){state.segment={type:"",state:"",hasEmail:false,warm:true};navigate("leads");}
 
+/* ============ NOTIFICATIONS ============ */
+function enableNotifs(){if(!("Notification"in window)){toast("Notifications not supported","err");return;}
+  Notification.requestPermission().then(p=>{toast(p==="granted"?"Desktop notifications on":"Notifications blocked",p==="granted"?"ok":"err");render();});}
+function checkAlerts(){
+  try{
+    const inbound=state.contacts.filter(isInbound).length;
+    const seen=parseInt(localStorage.getItem(lsKey("inboundSeen"))||"0");
+    if(inbound>seen && "Notification"in window && Notification.permission==="granted"){
+      new Notification("CeasAI Outreach",{body:(inbound-seen)+" new warm inbound lead(s) from Instagram."});
+    }
+    localStorage.setItem(lsKey("inboundSeen"),String(inbound));
+  }catch(e){}
+}
+function followupsDue(){return state.contacts.filter(c=>{
+  const d=daysAgo(c.last_contacted_at);
+  return d!=null && d>=3 && d<=45 && !["Replied","Meeting","Won","Lost"].includes(c.status);});}
+
 /* ============ DASHBOARD ============ */
 function viewDashboard(){
   const m=state.metrics;
   const total=state.contacts.length;
-  const byType={};BIZ_TYPES.forEach(t=>byType[t]=0);
-  let emCount=0;
-  state.contacts.forEach(c=>{const t=bizType(c);byType[t]=(byType[t]||0)+1;if(hasEmail(c))emCount++;});
+  const byType={};BIZ_TYPES.forEach(t=>byType[t]=0);let emCount=0;
+  state.contacts.forEach(c=>{byType[bizType(c)]=(byType[bizType(c)]||0)+1;if(hasEmail(c))emCount++;});
   const maxT=Math.max(1,...Object.values(byType));
-  const brk=BIZ_TYPES.filter(t=>byType[t]>0).map(t=>`
-    <div class="brk"><div class="nm">${esc(t)}</div>
-      <div class="bw"><div class="bar"><i style="width:${Math.round(byType[t]/maxT*100)}%"></i></div></div>
-      <div class="ct">${byType[t]}</div></div>`).join("")||`<div class="mut">No leads yet — import on the Leads tab.</div>`;
+  const brk=BIZ_TYPES.filter(t=>byType[t]>0).map(t=>`<div class="brk"><div class="nm">${esc(t)}</div>
+    <div class="bw"><div class="bar"><i style="width:${Math.round(byType[t]/maxT*100)}%"></i></div></div>
+    <div class="ct">${byType[t]}</div></div>`).join("");
+  const fu=followupsDue().length;
+  const notifOn=("Notification"in window)&&Notification.permission==="granted";
   return `
-  <div class="h1">Dashboard</div>
-  <div class="sub">Your outreach at a glance</div>
+  <div class="h1">Home</div>
+  <div class="sub">Is this working? Your outreach at a glance</div>
   <div class="metrics">
     <div class="metric ig"><div class="n">${num(m.dms)}</div><div class="l">IG DMs sent</div>${m.inbound?`<div style="font-size:11px;color:var(--good);font-weight:800;margin-top:5px">+${num(m.inbound)} inbound</div>`:""}</div>
     <div class="metric em"><div class="n">${num(m.emails)}</div><div class="l">Emails sent</div></div>
     <div class="metric rp"><div class="n">${num(m.responses)}</div><div class="l">Responses</div></div>
   </div>
-  ${m.inbound?`<div class="card" style="margin-top:14px;border-color:var(--good)">
+  <div class="card mt" style="margin-top:12px;border-color:#ffd36b55">
     <div class="row" style="align-items:center">
-      <div><div style="font-weight:800">🔥 ${num(m.inbound)} warm inbound lead${m.inbound===1?"":"s"}</div>
-        <div class="mut" style="font-size:12.5px">From Instagram keyword replies (ManyChat) — higher priority than cold.</div></div>
-      <div style="flex:none"><button class="btn good" onclick="viewWarm()">View →</button></div>
-    </div></div>`:""}
+      <div><div class="big" style="color:#ffd36b">${num(m.meetings)}</div><div class="mut" style="font-weight:700">Meetings booked — the goal 🎯</div></div>
+      <div style="flex:none"><button class="btn" onclick="navigate('outreach')">Log outreach →</button></div>
+    </div>
+  </div>
+  ${(m.inbound||fu)?`<div class="card">
+    <div style="font-weight:800;margin-bottom:8px">Needs attention</div>
+    ${m.inbound?`<div class="alert"><span class="ai">🔥</span><div style="flex:1"><b>${num(m.inbound)}</b> warm inbound lead(s) from IG keywords</div><button class="btn ghost" style="flex:none;padding:6px 10px" onclick="viewWarm()">View</button></div>`:""}
+    ${fu?`<div class="alert"><span class="ai">⏰</span><div style="flex:1"><b>${num(fu)}</b> follow-up(s) due (contacted 3+ days ago, no reply)</div><button class="btn ghost" style="flex:none;padding:6px 10px" onclick="state.outCh='email';navigate('outreach')">Work</button></div>`:""}
+    ${notifOn?"":`<div class="alert"><span class="ai">🔔</span><div style="flex:1">Get desktop alerts for new replies &amp; leads</div><button class="btn ghost" style="flex:none;padding:6px 10px" onclick="enableNotifs()">Enable</button></div>`}
+  </div>`:""}
+  ${reportCard()}
   <div class="card" style="margin-top:14px">
     <div class="row" style="align-items:center">
-      <div><div class="big" style="color:var(--txt)">${num(total)}</div><div class="mut" style="font-weight:700">Total leads &nbsp;·&nbsp; ${num(emCount)} emailable</div></div>
-      <div style="flex:none"><button class="btn" onclick="navigate('leads')">Build segment →</button></div>
+      <div><div class="big" style="color:var(--txt)">${num(total)}</div><div class="mut" style="font-weight:700">Total leads · ${num(emCount)} emailable</div></div>
+      <div style="flex:none"><button class="btn" onclick="navigate('leads')">Segments →</button></div>
     </div>
   </div>
-  <div class="card">
-    <div style="font-weight:800;margin-bottom:10px">Leads by business type</div>
-    ${brk}
-  </div>
-  <div class="card">
-    <div class="row" style="align-items:center">
-      <div><div style="font-weight:800">Responses received</div><div class="mut" style="font-size:12.5px">Check replies in the ceasai.pro Gmail inbox, then log the count here.</div></div>
-      <div class="stepper" style="flex:none">
-        <button class="btn" onclick="bumpResponses(-1)">–</button>
-        <div class="big" style="min-width:56px;text-align:center;color:var(--good)">${num(m.responses)}</div>
-        <button class="btn" onclick="bumpResponses(1)">+</button>
-      </div>
-    </div>
+  <div class="card"><div style="font-weight:800;margin-bottom:10px">Leads by business type</div>${brk}</div>`;
+}
+function reportCard(){
+  const m=state.metrics;
+  const rows=OUT_CHANNELS.map(ch=>{
+    const s=m.sentBy[ch]||0, r=m.repBy[ch]||0, rate=pct(r,s);
+    const cls=s===0?"":rate>=15?"g":rate>=5?"y":"r";
+    return `<tr><td class="ch">${CH[ch].ic} ${CH[ch].label}</td><td>${num(s)}</td><td>${num(r)}</td>
+      <td>${s?`<span class="pill ${cls}">${rate}%</span>`:'<span class="mut">—</span>'}</td></tr>`;
+  }).join("");
+  // best segment by replies (attribute replies to lead's biz type)
+  const segRep={};
+  state.events.forEach(e=>{if(e.status!=="replied"||!e.contact_id)return;const c=state.contacts.find(x=>x.id===e.contact_id);if(!c)return;const t=bizType(c);segRep[t]=(segRep[t]||0)+1;});
+  const top=Object.entries(segRep).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  return `<div class="card">
+    <div style="font-weight:800;margin-bottom:4px">What's working</div>
+    <div class="mut" style="font-size:12px;margin-bottom:10px">Sent, replies &amp; reply-rate by channel. Log replies as they land so this stays true.</div>
+    <table class="rtable"><thead><tr><th>Channel</th><th>Sent</th><th>Replies</th><th>Reply %</th></tr></thead><tbody>${rows}</tbody></table>
+    ${top.length?`<div class="mut" style="font-size:12.5px;margin-top:10px">Top replying segments: ${top.map(([t,n])=>esc(t)+" ("+n+")").join(" · ")}</div>`:""}
+    <button class="btn ghost block" style="margin-top:10px" onclick="quickReply()">+ Log a reply</button>
   </div>`;
 }
-function bumpResponses(d){const n=Math.max(0,respGet()+d);respSet(n);state.metrics.responses=n;render();}
+function quickReply(){
+  const opts=OUT_CHANNELS.map(ch=>`<button class="btn block" style="margin-bottom:8px" onclick="logReplyCh('${ch}',this)">${CH[ch].ic} Reply via ${CH[ch].label}</button>`).join("");
+  document.body.insertAdjacentHTML("beforeend",`<div class="modal" onclick="if(event.target===this)this.remove()"><div class="sheet">
+    <div class="h1">Log a reply</div><div class="sub">Which channel did the reply come through?</div>${opts}
+    <button class="btn ghost block" onclick="this.closest('.modal').remove()">Cancel</button></div></div>`);
+}
+async function logReplyCh(ch,btn){btn.disabled=true;await logEvent(ch,null,"replied",{note:"manual reply"});const md=btn.closest(".modal");if(md)md.remove();toast("Reply logged","ok");render();}
 
-/* ============ LEADS / SEGMENTS ============ */
+/* ============ LEADS ============ */
 function viewLeads(){
   const imported=state.contacts.some(c=>c.source==="mindbody");
-  const seg=segFilter(state.contacts);
-  const em=emailable(seg);const ig=withIG(seg);
+  const seg=segFilter(state.contacts);const em=emailable(seg);const ig=withIG(seg);
   const typeChips=["",...BIZ_TYPES].map(t=>`<span class="chip ${state.segment.type===t?'on':''}" onclick="setSeg('type',this.dataset.t)" data-t="${esc(t)}">${t?esc(t):"All types"}</span>`).join(" ");
   const stateOpts=`<option value="">All states</option>`+statesList().map(s=>`<option value="${s}" ${state.segment.state===s?'selected':''}>${s}</option>`).join("");
   const preview=seg.slice(0,40).map(c=>leadCard(c)).join("")||`<div class="mut">No leads match this segment.</div>`;
@@ -349,272 +414,321 @@ function viewLeads(){
       <div class="field" style="margin:0;max-width:150px"><label>&nbsp;</label>
         <button class="btn ${state.segment.hasEmail?'primary':''} block" onclick="toggleSeg('hasEmail')">${state.segment.hasEmail?'✓ Has email':'Has email'}</button></div>
     </div>
-    <button class="btn ${state.segment.warm?'good':''} block" style="margin-top:10px" onclick="toggleSeg('warm')">${state.segment.warm?'✓ Warm inbound only':'🔥 Warm inbound only'}</button>
+    <button class="btn ${state.segment.warm?'good':''} block" style="margin-top:10px" onclick="toggleSeg('warm')">${state.segment.warm?'✓ Warm only':'🔥 Warm only (replied/inbound)'}</button>
   </div>
   <div class="card">
     <div class="row" style="align-items:center;margin-bottom:12px">
       <div><div style="font-weight:900;font-size:26px">${num(seg.length)}</div><div class="mut" style="font-weight:700">in segment · ${num(em.length)} emailable · ${num(ig.length)} on IG</div></div>
     </div>
-    <div class="row">
-      <button class="btn primary" onclick="navigate('email')">✉️ Email segment</button>
-      <button class="btn" style="background:linear-gradient(135deg,var(--accent2),#b06dff);border:none;color:#fff" onclick="navigate('dm')">📷 DM segment</button>
-    </div>
+    <button class="btn primary block" onclick="navigate('outreach')">🚀 Outreach to this segment</button>
   </div>
-  <div class="card">
-    <div style="font-weight:800;margin-bottom:10px">Preview <span class="mut" style="font-weight:600">(first 40)</span></div>
-    ${preview}
-  </div>`;
+  <div class="card"><div style="font-weight:800;margin-bottom:10px">Preview <span class="mut" style="font-weight:600">(first 40)</span></div>${preview}</div>`;
 }
 function leadCard(c){
   const tags=[];
-  if(isInbound(c))tags.push('<span class="tag" style="color:var(--good)">🔥 warm inbound</span>');
+  if(isInbound(c))tags.push('<span class="tag" style="color:var(--good)">🔥 inbound</span>');
+  else if(c.status==="Replied")tags.push('<span class="tag" style="color:var(--good)">↩ replied</span>');
   if(hasEmail(c))tags.push('<span class="tag em">✉ email</span>');
   const ig=igOf(c);if(ig)tags.push('<span class="tag ig">📷 @'+esc(ig)+'</span>');
   tags.push('<span class="tag">'+esc(bizType(c))+'</span>');
-  return `<div class="lead">
-    <div class="nm">${esc(dispName(c))}</div>
-    <div class="meta">${esc([c.city,stOf(c)].filter(Boolean).join(", "))||"—"}</div>
-    <div>${tags.join("")}</div>
-  </div>`;
+  return `<div class="lead"><div class="nm">${esc(dispName(c))}</div>
+    <div class="meta">${esc([c.city,stOf(c)].filter(Boolean).join(", "))||"—"}</div><div>${tags.join("")}</div></div>`;
 }
-
 async function importLeads(btn){
   if(!state.org){toast("Org not ready","err");return;}
   if(state.contacts.some(c=>c.source==="mindbody")){toast("Already imported","ok");return;}
   btn.disabled=true;const o=btn.innerHTML;btn.innerHTML='<span class="spin"></span> Importing…';
   try{
-    const res=await fetch("leads-seed.json",{cache:"no-store"});
-    const seed=await res.json();
+    const seed=await fetch("leads-seed.json",{cache:"no-store"}).then(r=>r.json());
     const org_id=state.org.id;let done=0;
     for(let i=0;i<seed.length;i+=200){
-      const batch=seed.slice(i,i+200).map(s=>{
-        const tags=["biz:"+(s.business_type||"Other")];
-        if(s.state)tags.push("st:"+String(s.state).toUpperCase());
-        if(s.instagram)tags.push("ig:"+igClean(s.instagram));
-        return {
-          org_id, first_name:"", last_name:"",
-          title:s.company||null, email:s.email||null, city:s.city||null,
-          tags, source:"mindbody", status:"New",
-          notes:s.website?("web: "+s.website):null
-        };
-      });
-      const {error}=await sb.from("contacts").insert(batch);
-      if(error)throw error;
+      const batch=seed.slice(i,i+200).map(s=>{const tags=["biz:"+(s.business_type||"Other")];
+        if(s.state)tags.push("st:"+String(s.state).toUpperCase());if(s.instagram)tags.push("ig:"+igClean(s.instagram));
+        return {org_id,first_name:"",last_name:"",title:s.company||null,email:s.email||null,city:s.city||null,
+          tags,source:"mindbody",status:"New",notes:s.website?("web: "+s.website):null};});
+      const {error}=await sb.from("contacts").insert(batch);if(error)throw error;
       done+=batch.length;btn.innerHTML='<span class="spin"></span> '+done+" / "+seed.length;
     }
-    toast("Imported "+done+" leads","ok");
-    await loadAll();render();
+    toast("Imported "+done+" leads","ok");await loadAll();render();
   }catch(e){toastErr(e);btn.disabled=false;btn.innerHTML=o;}
 }
 
-/* ============ EMAIL — ONE CLICK ============ */
-function viewEmail(){
-  const tpl=tplGet();
-  const seg=segFilter(state.contacts);
-  const send=emailable(seg);
-  const org=state.org||{};
-  const ready=!!org.mailing_address && !!org.from_email;
+/* ============ OUTREACH (all channels) ============ */
+function viewOutreach(){
+  const tabs=OUT_CHANNELS.map(ch=>`<button class="${state.outCh===ch?'on':''}" onclick="state.outCh='${ch}';render()">${CH[ch].ic} ${CH[ch].label}</button>`).join("");
+  let panel="";
+  if(state.outCh==="email")panel=panelEmail();
+  else if(state.outCh==="call")panel=panelCall();
+  else panel=panelQueue(state.outCh);
+  return `<div class="h1">Outreach</div>
+  <div class="sub">Segment: ${esc(segLabel())} · <a onclick="navigate('leads')" style="cursor:pointer">change</a></div>
+  <div class="seg" style="margin-bottom:14px">${tabs}</div>${panel}`;
+}
+
+/* ---- EMAIL panel (one-click mass) ---- */
+function panelEmail(){
+  const tpl=tplGet();const seg=segFilter(state.contacts);const send=emailable(seg);
+  const org=state.org||{};const acct=acctActive("email");
+  const fromEmail=(acct&&acct.from_email)||org.from_email;
+  const ready=!!org.mailing_address && !!fromEmail;
   const sample=send[0]||seg[0]||null;
   return `
-  <div class="h1">Mass Email</div>
-  <div class="sub">Template B · sends through your Gmail SMTP engine</div>
   <div class="card">
-    <div class="mut" style="font-weight:700;margin-bottom:6px">Segment</div>
-    <div style="font-weight:800;font-size:15px">${esc(segLabel())}</div>
-    <div style="margin-top:10px;display:flex;align-items:baseline;gap:8px">
-      <div class="big" style="color:var(--accent)">${num(send.length)}</div>
-      <div class="mut" style="font-weight:700">will receive this email</div>
-    </div>
-    <div class="mut" style="font-size:12.5px;margin-top:4px">of ${num(seg.length)} in segment · suppressed &amp; no-email leads are skipped automatically</div>
-    <button class="btn ghost block" style="margin-top:10px" onclick="navigate('leads')">Change segment →</button>
+    <div class="mut" style="font-weight:700;margin-bottom:6px">Sending account</div>
+    <div style="font-weight:800">${acct?esc(acct.label)+" · "+esc(acct.from_email||""):esc(fromEmail||"(set in Accounts)")}</div>
+    <div style="margin-top:10px;display:flex;align-items:baseline;gap:8px"><div class="big" style="color:var(--accent)">${num(send.length)}</div><div class="mut" style="font-weight:700">will receive this email</div></div>
+    <div class="mut" style="font-size:12.5px;margin-top:4px">of ${num(seg.length)} in segment · suppressed &amp; no-email leads skipped</div>
   </div>
-  ${ready?"":`<div class="banner warn">⚠ Set your From email + mailing address in <b>Settings</b> before sending (legally required).</div>`}
+  ${ready?"":`<div class="banner warn">⚠ Add a From email (Accounts) + mailing address (Settings) before sending.</div>`}
   <div class="card">
     <div class="field"><label>Subject</label><input id="e-subj" value="${esc(tpl.subject)}" oninput="saveTpl()"/></div>
-    <div class="field" style="margin-bottom:6px"><label>Body — {{title}} (business name) &amp; {{city}} auto-fill per lead</label>
-      <textarea id="e-body" oninput="saveTpl()">${esc(tpl.body)}</textarea></div>
-    <div class="mut" style="font-size:12px">A footer with your name, address and an unsubscribe link is added automatically to every email.</div>
-    <button class="btn ghost" style="margin-top:8px" onclick="resetTpl()">↺ Reset to Template B</button>
+    <div class="field" style="margin-bottom:6px"><label>Body — {{title}} (business) &amp; {{city}} auto-fill</label><textarea id="e-body" oninput="saveTpl()">${esc(tpl.body)}</textarea></div>
+    <div class="row"><button class="btn ghost" onclick="insertBooking('e-body')">📅 Insert booking link</button><button class="btn ghost" onclick="resetTpl()">↺ Template B</button></div>
+    <div class="mut" style="font-size:12px;margin-top:8px">A footer with your address + unsubscribe link is auto-added (CAN-SPAM).</div>
   </div>
-  ${sample?`<div class="card">
-    <div style="font-weight:800;margin-bottom:8px">Preview <span class="mut" style="font-weight:600">— ${esc(dispName(sample))}</span></div>
-    <div class="qbox"><b>${esc(mergeMail(tpl.subject,sample))}</b>\n\n${esc(mergeMail(tpl.body,sample))}</div>
-  </div>`:""}
-  <button class="btn primary block lg" ${send.length&&ready?"":"disabled"} onclick="confirmSend()">
-    🚀 Send to all ${num(send.length)}
-  </button>
-  <div class="mut center" style="font-size:12px;margin-top:8px">Paced sending · ${num(org.daily_cap||100)}/day cap · one email per business</div>`;
+  ${sample?`<div class="card"><div style="font-weight:800;margin-bottom:8px">Preview — ${esc(dispName(sample))}</div>
+    <div class="qbox"><b>${esc(mergeMail(tpl.subject,sample))}</b>\n\n${esc(mergeMail(tpl.body,sample))}</div></div>`:""}
+  <button class="btn primary block lg" ${send.length&&ready?"":"disabled"} onclick="confirmSend()">🚀 Send to all ${num(send.length)}</button>
+  <div class="mut center" style="font-size:12px;margin-top:8px">Paced · ${num(org.daily_cap||100)}/day cap · one email per business</div>`;
 }
-function mergeMail(t,c){
-  const map={title:dispName(c),business:dispName(c),company:dispName(c),
-    city:c.city||"your area",first_name:c.first_name||"there",first:c.first_name||"there"};
-  return String(t||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);
-}
+function mergeMail(t,c){const map={title:dispName(c),business:dispName(c),company:dispName(c),city:c.city||"your area",
+  first_name:c.first_name||"there",first:c.first_name||"there",booking:bookingUrl()||"(booking link)"};
+  return String(t||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);}
 function saveTpl(){tplSet({subject:$("#e-subj").value,body:$("#e-body").value});}
 function resetTpl(){tplSet({...TEMPLATE_B});render();}
+function insertBooking(id){const b=bookingUrl();if(!b){toast("Add a booking link in Accounts","err");return;}
+  const el=$("#"+id);el.value=el.value.replace(/\s*$/,"")+"\n\nBook a quick call: "+b;if(id==="e-body")saveTpl();}
 function confirmSend(){
-  const send=emailable(segFilter(state.contacts));
-  if(!send.length)return;
-  const sheet=`<div class="modal" onclick="if(event.target===this)this.remove()"><div class="sheet">
-    <div class="h1">Send to ${num(send.length)} businesses?</div>
-    <div class="sub">${esc(segLabel())} · through your Gmail SMTP engine</div>
-    <div class="banner info">Emails are personalized, paced, capped at ${num((state.org&&state.org.daily_cap)||100)}/day, and every send is logged. Unsubscribed leads are skipped.</div>
+  const send=emailable(segFilter(state.contacts));if(!send.length)return;
+  document.body.insertAdjacentHTML("beforeend",`<div class="modal" onclick="if(event.target===this)this.remove()"><div class="sheet">
+    <div class="h1">Send to ${num(send.length)} businesses?</div><div class="sub">${esc(segLabel())} · via your Gmail SMTP engine</div>
+    <div class="banner info">Personalized, paced, capped at ${num((state.org&&state.org.daily_cap)||100)}/day, every send logged. Unsubscribed skipped.</div>
     <button class="btn primary block lg" onclick="doSend(this)">Yes — send now</button>
-    <button class="btn ghost block" style="margin-top:8px" onclick="this.closest('.modal').remove()">Cancel</button>
-  </div></div>`;
-  document.body.insertAdjacentHTML("beforeend",sheet);
+    <button class="btn ghost block" style="margin-top:8px" onclick="this.closest('.modal').remove()">Cancel</button></div></div>`);
 }
 async function sentCount(){try{const r=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");return r.count||0;}catch(e){return null;}}
 async function doSend(btn){
   btn.disabled=true;btn.innerHTML='<span class="spin"></span> Sending…';
-  const tpl=tplGet();
-  const send=emailable(segFilter(state.contacts));
-  const ids=send.map(c=>c.id);
-  const before=await sentCount();
-  let campId=null;
-  try{
-    const {data:camp}=await sb.from("campaigns").insert({
-      org_id:state.org.id, name:"Mass email — "+segLabel(), subject:tpl.subject, body:tpl.body,
-      status:"queued", total:ids.length, daily_cap:(state.org.daily_cap||100)
-    }).select().maybeSingle();
-    campId=camp?camp.id:null;
-  }catch(e){}
-  let data=null, invokeErr=null;
-  try{
-    const r=await sb.functions.invoke("send-campaign",{body:{campaign_id:campId, contact_ids:ids, subject:tpl.subject, body:tpl.body}});
-    data=r.data; invokeErr=r.error||null;
-  }catch(e){invokeErr=e;}
-  // The deployed edge fn can return 500 on connection cleanup AFTER sending+logging,
-  // so reconcile the true number sent from the email_events log.
+  const tpl=tplGet();const send=emailable(segFilter(state.contacts));const ids=send.map(c=>c.id);
+  const acct=acctActive("email");
+  if(acct&&acct.from_email&&acct.from_email!==state.org.from_email){
+    try{await sb.from("orgs").update({from_email:acct.from_email,reply_to:acct.reply_to||null}).eq("id",state.org.id);state.org.from_email=acct.from_email;}catch(e){}
+  }
+  const before=await sentCount();let campId=null;
+  try{const {data:camp}=await sb.from("campaigns").insert({org_id:state.org.id,name:"Mass email — "+segLabel(),subject:tpl.subject,body:tpl.body,status:"queued",total:ids.length,daily_cap:(state.org.daily_cap||100)}).select().maybeSingle();campId=camp?camp.id:null;}catch(e){}
+  let data=null,invokeErr=null;
+  try{const r=await sb.functions.invoke("send-campaign",{body:{campaign_id:campId,contact_ids:ids,subject:tpl.subject,body:tpl.body}});data=r.data;invokeErr=r.error||null;}catch(e){invokeErr=e;}
   await new Promise(r=>setTimeout(r,900));
   const after=await sentCount();
   const delta=(before!=null&&after!=null)?Math.max(0,after-before):null;
   const sent=(data&&typeof data.sent==="number")?data.sent:(delta!=null?delta:0);
-  const modal=btn.closest(".modal");if(modal)modal.remove();
+  const md=btn.closest(".modal");if(md)md.remove();
   if(data&&data.reason==="no_provider"){toast("SMTP not configured in Supabase secrets","err");}
-  else if(data&&data.reason==="no_address"){toast("Add a mailing address in Settings first","err");navigate("settings");return;}
+  else if(data&&data.reason==="no_address"){toast("Add a mailing address in Settings","err");navigate("settings");return;}
   else if(sent>0){toast("Sent "+num(sent)+(data&&data.capped_over_daily_limit?" · "+data.capped_over_daily_limit+" held for tomorrow":""),"ok");}
-  else if(invokeErr||data&&data.reason==="smtp_connect_failed"){toast("Send didn't go through — check SMTP secrets/port 465","err");}
+  else if(invokeErr||(data&&data.reason==="smtp_connect_failed")){toast("Send didn't go through — check SMTP secrets/port 465","err");}
   else{toast("Nothing sent (no eligible recipients)","err");}
-  await loadMetrics();navigate("dashboard");
+  await loadAll();navigate("dashboard");
 }
 
-/* ============ IG DM CENTER ============ */
-const DM_GREET=["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first} — hope you're good!","Hey there!","Hi! 👋"];
-const DM_OPEN=["love what you're doing at {biz}.","been checking out {biz} — really great stuff.","came across {biz} and had to reach out.","{biz} caught my eye — impressed with what you're building.","found {biz} while looking at {type}s in {city}."];
-const DM_VALUE=["I build simple AI tools for {type}s that capture every lead and follow up (and book them) automatically.","We help {type}s like yours stop losing leads — one simple app that replies + books clients in seconds.","I make one little app that handles the follow-up + booking for {type}s so you can focus on the work.","custom AI that answers new leads in seconds so none slip through the cracks."];
-const DM_CTA=["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {biz}?","Mind if I share a quick example?","Worth a quick look? no pressure."];
-function typeWord(t){return ({"Gym":"gym","CrossFit":"CrossFit box","MMA / Boxing":"gym","Yoga / Pilates":"studio","Personal Training":"training studio","Boutique Studio":"studio","Wellness / Spa":"wellness business","Other":"business"})[t]||"business";}
-function genDM(c){
-  const ctx={first:(c.first_name||"there"),biz:dispName(c)==="—"?"your studio":dispName(c),city:c.city||"your area",type:typeWord(bizType(c))};
-  return [pick(DM_GREET),pick(DM_OPEN),pick(DM_VALUE),pick(DM_CTA)]
-    .map(p=>String(p).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:m)).join(" ").replace(/\s{2,}/g," ").trim();
+/* ---- QUEUE panel (Instagram / LinkedIn / SMS) ---- */
+function eligibleFor(ch){
+  let seg=segFilter(state.contacts);
+  if(ch==="instagram_dm")return withIG(seg);
+  if(ch==="linkedin")return seg;                 // owner sends from LinkedIn app; all in segment
+  if(ch==="sms")return seg.filter(isWarm);       // WARM ONLY (TCPA)
+  return seg;
 }
-function viewDM(){
-  const seg=withIG(segFilter(state.contacts));
-  const sig=segLabel();
-  if(state.dm._sig!==sig){state.dm.queue=seg.map(c=>c.id);state.dm.idx=0;state.dm._sig=sig;state.dm.text="";}
-  const q=state.dm.queue;
-  return `
-  <div class="h1">Instagram DM Center</div>
-  <div class="sub">Ban-safe one-tap queue · ${esc(sig)}</div>
-  <div class="banner warn">Instagram has <b>no official API for cold/mass DMs</b> — automation risks a ban. This queue is the safe, effective way: it writes a personalized DM for each lead, you tap to copy &amp; open Instagram, send, and log it.</div>
-  <div class="card">
+function panelQueue(ch){
+  const list=eligibleFor(ch);const sig=ch+"|"+segLabel();
+  if(state.q._sig!==sig){state.q.queue=list.map(c=>c.id);state.q.idx=0;state.q._sig=sig;state.q.text="";}
+  const acct=acctActive(ch);
+  let note="";
+  if(ch==="instagram_dm")note=`<div class="banner warn">Instagram has <b>no official API for cold/mass DMs</b> — automation risks a ban. This queue writes a personalized DM per lead; you tap to copy &amp; open IG, send, and log it.</div>`;
+  if(ch==="linkedin")note=`<div class="banner warn">LinkedIn <b>prohibits automation/bots</b>. Same safe pattern: personalized message per lead → copy &amp; open their profile → you send it yourself → log it.</div>`;
+  if(ch==="sms")note=`<div class="banner warn">⚖ <b>Warm leads only.</b> Cold B2B texting carries real TCPA legal risk in the US, so SMS is limited to people who replied or opted in. ${list.length?"":"No warm leads in this segment yet."}</div>`;
+  const acctLine=`<div class="mut" style="font-size:12.5px;margin-bottom:10px">Sending as: <b>${acct?esc(acct.label):"(no account — add in Accounts)"}</b></div>`;
+  return `${note}
+  <div class="card">${acctLine}
     <div class="row" style="align-items:center">
-      <div><div style="font-weight:900;font-size:26px">${num(q.length)}</div><div class="mut" style="font-weight:700">leads with Instagram in this segment</div></div>
-      <div style="flex:none" class="center"><div class="big" style="color:var(--accent2)">${num(state.dm.idx)}</div><div class="mut" style="font-size:11px;font-weight:700">done</div></div>
+      <div><div style="font-weight:900;font-size:26px">${num(state.q.queue.length)}</div><div class="mut" style="font-weight:700">${CH[ch].label} queue</div></div>
+      <div style="flex:none" class="center"><div class="big" style="color:var(--accent2)">${num(state.q.idx)}</div><div class="mut" style="font-size:11px;font-weight:700">done</div></div>
     </div>
-    ${q.length?"":`<div class="banner info" style="margin:12px 0 0">No leads with an Instagram handle in this segment. Adjust the segment on the Leads tab.</div>`}
-    <button class="btn ghost block" style="margin-top:12px" onclick="navigate('leads')">Change segment →</button>
-  </div>
-  ${renderDMCard()}`;
+    ${state.q.queue.length?"":`<div class="banner info" style="margin:12px 0 0">No eligible leads. Adjust the segment on Leads.</div>`}
+  </div>${renderQCard(ch)}`;
 }
-function renderDMCard(){
-  const q=state.dm.queue;
-  if(state.dm.idx>=q.length){
-    if(!q.length)return "";
+function renderQCard(ch){
+  const q=state.q.queue;
+  if(state.q.idx>=q.length){if(!q.length)return "";
     return `<div class="card center"><div style="font-size:40px">✅</div><div style="font-weight:800;margin-top:6px">Queue complete</div>
-      <div class="mut">Logged ${num(q.length)} DMs. Nice work.</div>
-      <button class="btn block" style="margin-top:12px" onclick="state.dm.idx=0;state.dm.text='';render()">↺ Restart queue</button></div>`;
-  }
-  const c=state.contacts.find(x=>x.id===q[state.dm.idx]);
-  if(!c)return "";
-  if(!state.dm.text)state.dm.text=genDM(c);
-  const handle=igOf(c);
+      <div class="mut">Logged ${num(q.length)} ${CH[ch].label} messages.</div>
+      <button class="btn block" style="margin-top:12px" onclick="state.q.idx=0;state.q.text='';render()">↺ Restart</button></div>`;}
+  const c=state.contacts.find(x=>x.id===q[state.q.idx]);if(!c)return "";
+  if(!state.q.text)state.q.text=genMsg(c,ch);
+  const openBtn=qOpenButton(c,ch);
   return `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div><div style="font-weight:800">${esc(dispName(c))}</div>
-        <div class="mut" style="font-size:12.5px">@${esc(handle)} · ${esc(bizType(c))} · ${esc([c.city,stOf(c)].filter(Boolean).join(", "))}</div></div>
-      <div class="mut" style="font-weight:800">${state.dm.idx+1}/${q.length}</div>
+        <div class="mut" style="font-size:12.5px">${esc(bizType(c))} · ${esc([c.city,stOf(c)].filter(Boolean).join(", "))}${igOf(c)?" · @"+esc(igOf(c)):""}</div></div>
+      <div class="mut" style="font-weight:800">${state.q.idx+1}/${q.length}</div>
     </div>
-    <div class="qbox" id="dm-text">${esc(state.dm.text)}</div>
+    <div class="qbox">${esc(state.q.text)}</div>
     <div class="row" style="margin-top:10px">
-      <button class="btn" onclick="state.dm.text=genDM(state.contacts.find(x=>x.id==='${c.id}'));render()">🔀 Rewrite</button>
-      <button class="btn primary" onclick="copyOpenIG('${esc(handle)}')">📋 Copy &amp; open IG</button>
+      <button class="btn" onclick="state.q.text=genMsg(state.contacts.find(x=>x.id==='${c.id}'),'${ch}');render()">🔀 Rewrite</button>
+      ${openBtn}
     </div>
     <div class="row" style="margin-top:9px">
-      <button class="btn ghost" onclick="dmSkip()">Skip</button>
-      <button class="btn good" onclick="dmSent(this,'${c.id}')">✓ Mark sent</button>
+      <button class="btn ghost" onclick="qSkip()">Skip</button>
+      <button class="btn good" onclick="qSent(this,'${c.id}','${ch}')">✓ Mark sent</button>
     </div>
+    <button class="btn ghost block" style="margin-top:9px" onclick="markMeeting('${c.id}',this)">📅 Booked a meeting</button>
   </div>`;
 }
-async function copyOpenIG(handle){
-  try{await navigator.clipboard.writeText(state.dm.text);toast("DM copied","ok");}catch(e){}
-  window.open("https://ig.me/m/"+handle,"_blank");
+function qOpenButton(c,ch){
+  if(ch==="instagram_dm"){const h=igOf(c);return `<button class="btn primary" onclick="copyOpen('https://ig.me/m/${esc(h)}')">📋 Copy &amp; open IG</button>`;}
+  if(ch==="linkedin"){return `<button class="btn primary" onclick="copyOpen('https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(dispName(c))}')">📋 Copy &amp; open LinkedIn</button>`;}
+  if(ch==="sms"){const ph=(c.phone||"").replace(/[^0-9+]/g,"");return `<button class="btn primary" onclick="copyOpen('sms:${esc(ph)}')">📋 Copy &amp; open SMS</button>`;}
+  return `<button class="btn primary" onclick="copyOpen('')">📋 Copy</button>`;
 }
-function dmSkip(){state.dm.idx++;state.dm.text="";render();}
-async function dmSent(btn,id){
-  btn.disabled=true;
-  try{
-    const c=state.contacts.find(x=>x.id===id);
-    const now=new Date().toISOString();
-    const {error}=await sb.from("email_events").insert({
-      org_id:state.org.id, contact_id:id, channel:"instagram_dm", status:"sent",
-      provider:"instagram", subject:"IG DM", to_email:null, sent_at:now,
-      completed_by:state.user.email, personalization:{business:c&&dispName(c),text:state.dm.text}
-    });
-    if(error)throw error;
-    await sb.from("contacts").update({last_contacted_at:now}).eq("id",id);
-    state.metrics.dms++;state.dm.idx++;state.dm.text="";
-    toast("Logged IG DM","ok");render();
-  }catch(e){toastErr(e);btn.disabled=false;}
+async function copyOpen(url){try{await navigator.clipboard.writeText(state.q.text);toast("Message copied","ok");}catch(e){}if(url)window.open(url,"_blank");}
+function qSkip(){state.q.idx++;state.q.text="";render();}
+async function qSent(btn,id,ch){btn.disabled=true;
+  const c=state.contacts.find(x=>x.id===id);
+  const acct=acctActive(ch);
+  await logEvent(ch,id,"sent",{text:state.q.text,account:acct?acct.label:null,business:c&&dispName(c)});
+  try{await sb.from("contacts").update({last_contacted_at:new Date().toISOString(),status:(c&&c.status==="New")?"Contacted":c.status}).eq("id",id);
+    if(c){c.last_contacted_at=new Date().toISOString();if(c.status==="New")c.status="Contacted";}}catch(e){}
+  state.q.idx++;state.q.text="";toast("Logged "+CH[ch].label,"ok");render();
 }
+async function markMeeting(id,btn){btn.disabled=true;
+  await logEvent("meeting",id,"sent",{});
+  try{await sb.from("contacts").update({status:"Meeting"}).eq("id",id);const c=state.contacts.find(x=>x.id===id);if(c)c.status="Meeting";}catch(e){}
+  toast("🎉 Meeting booked!","ok");render();
+}
+
+/* ---- CALL panel (manual logging) ---- */
+function panelCall(){
+  const seg=segFilter(state.contacts);const withPhone=seg.filter(c=>c.phone);
+  const list=(withPhone.length?withPhone:seg).slice(0,60);
+  const rows=list.map(c=>`<div class="lead">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div class="nm">${esc(dispName(c))}</div><div class="meta">${esc(bizType(c))} · ${esc([c.city,stOf(c)].filter(Boolean).join(", "))}${c.phone?" · "+esc(c.phone):""}</div></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn good" style="padding:8px" onclick="logCall('${c.id}','connected',this)">✓ Connected</button>
+      <button class="btn ghost" style="padding:8px" onclick="logCall('${c.id}','no answer',this)">No answer</button>
+      <button class="btn" style="padding:8px" onclick="markMeeting('${c.id}',this)">📅 Booked</button>
+    </div></div>`).join("")||`<div class="mut">No leads in this segment.</div>`;
+  return `<div class="banner info">Log calls manually as you make them. Phone numbers weren't in the Mindbody export, so add them per-lead or dial from your own list.</div>
+  <div class="card"><div style="font-weight:800;margin-bottom:10px">Segment leads</div>${rows}</div>`;
+}
+async function logCall(id,outcome,btn){btn.disabled=true;
+  await logEvent("call",id,"sent",{outcome});
+  try{await sb.from("contacts").update({last_contacted_at:new Date().toISOString()}).eq("id",id);}catch(e){}
+  toast("Call logged: "+outcome,"ok");
+}
+
+/* ---- message generator (IG / LinkedIn / SMS) ---- */
+function typeWord(t){return ({"Gym":"gym","CrossFit":"CrossFit box","MMA / Boxing":"gym","Yoga / Pilates":"studio","Personal Training":"training studio","Boutique Studio":"studio","Wellness / Spa":"wellness business","Other":"business"})[t]||"business";}
+function genMsg(c,ch){
+  const biz=dispName(c)==="—"?"your studio":dispName(c);
+  const ctx={biz,city:c.city||"your area",type:typeWord(bizType(c))};
+  const book=bookingUrl();
+  let parts;
+  if(ch==="linkedin"){
+    parts=[pick(["Hi — I came across {biz} and wanted to connect.","Hi! Loved what {biz} is doing and had to reach out."]),
+      pick(["I build simple AI tools for {type}s that capture every lead and follow up + book clients automatically.","I help {type}s stop losing leads — one simple app that replies and books in seconds."]),
+      pick(["Open to a quick look?","Worth a short chat?","Mind if I share a 2-min example?"])];
+  }else if(ch==="sms"){
+    parts=[pick(["Hey! Following up from {biz} —","Hi — thanks for reaching out to {biz}!","Hey, great connecting re: {biz}."]),
+      pick(["I build simple AI that books more clients for {type}s.","quick AI tool that follows up + books your leads automatically."]),
+      pick(["Want the 2-min version?","Cool if I send an example?","Good time for a quick call?"])];
+  }else{ // instagram_dm
+    parts=[pick(["Hey there!","Hi 👋","Hey — hope you're good!"]),
+      pick(["love what you're doing at {biz}.","came across {biz} and had to reach out.","found {biz} while looking at {type}s in {city}."]),
+      pick(["I build simple AI tools for {type}s that capture every lead and follow up (and book them) automatically.","one simple app that replies to leads in seconds + books them for you."]),
+      pick(["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {biz}?"])];
+  }
+  let msg=parts.map(p=>String(p).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:m)).join(" ").replace(/\s{2,}/g," ").trim();
+  if(book && ch!=="sms")msg+=" "+book;
+  return msg;
+}
+
+/* ============ ACCOUNTS ============ */
+function viewAccounts(){
+  const a=acctAll();
+  const chBlock=(ch,fields)=>{
+    const items=(a[ch]||[]).map(x=>{
+      const on=(a.active&&a.active[ch])===x.id||((a[ch]||[])[0]&&(a[ch]||[])[0].id===x.id&&!(a.active&&a.active[ch]));
+      const idline=ch==="email"?(x.from_email||""):ch==="instagram"?("@"+igClean(x.handle||"")):ch==="sms"?(x.number||""):(x.profile||"");
+      return `<div class="acct ${on?'on':''}"><span class="dot ${on?'on':''}"></span>
+        <div style="flex:1"><div class="lbl">${esc(x.label||"Account")}</div><div class="id">${esc(idline)}</div></div>
+        <button class="btn ghost" style="padding:6px 10px;flex:none" onclick="setActive('${ch}','${x.id}')">${on?'Active':'Use'}</button>
+        <button class="btn ghost" style="padding:6px 9px;flex:none;color:var(--bad)" onclick="delAcct('${ch}','${x.id}')">✕</button></div>`;
+    }).join("")||`<div class="mut" style="font-size:13px;margin-bottom:8px">No ${CH[ch==="instagram"?"instagram_dm":ch].label} accounts yet.</div>`;
+    return `<div class="card">
+      <div style="font-weight:800;margin-bottom:10px">${CH[ch==="instagram"?"instagram_dm":ch].ic} ${CH[ch==="instagram"?"instagram_dm":ch].label} accounts</div>
+      ${items}
+      <div class="row" style="margin-top:6px">${fields}</div>
+      <button class="btn block" style="margin-top:8px" onclick="addAcct('${ch}')">+ Add account</button>
+    </div>`;
+  };
+  return `<div class="h1">Accounts</div>
+  <div class="sub">Connect &amp; rotate the account you send from, per channel</div>
+  <div class="banner warn">Heads-up on email: stacking free Gmail accounts to dodge sending limits <b>hurts deliverability and risks bans</b>. The durable way is real domains with proper warm-up. Rotate responsibly.</div>
+  ${chBlock("email",`<input id="ac-email-label" placeholder="Label (e.g. Main)"/><input id="ac-email-addr" placeholder="from email"/>`)}
+  ${chBlock("instagram",`<input id="ac-instagram-label" placeholder="Label"/><input id="ac-instagram-handle" placeholder="@handle"/>`)}
+  ${chBlock("linkedin",`<input id="ac-linkedin-label" placeholder="Label"/><input id="ac-linkedin-profile" placeholder="profile URL"/>`)}
+  ${chBlock("sms",`<input id="ac-sms-label" placeholder="Label"/><input id="ac-sms-number" placeholder="+1..."/>`)}
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">📅 Booking link</div>
+    <div class="mut" style="font-size:12.5px;margin-bottom:10px">Your Calendly / Cal.com URL. Drop it into any message with “Insert booking link”. Meetings are your conversion goal — log them from Outreach.</div>
+    <div class="field" style="margin:0"><input id="ac-booking" value="${esc(a.booking||"")}" placeholder="https://cal.com/your-name/intro"/></div>
+    <button class="btn primary block" style="margin-top:10px" onclick="saveBooking()">Save booking link</button>
+  </div>`;
+}
+function addAcct(ch){
+  const a=acctAll();const g=id=>{const el=$("#ac-"+ch+"-"+id);return el?el.value.trim():"";};
+  const label=g("label")||CH[ch==="instagram"?"instagram_dm":ch].label;
+  const obj={id:"a"+Date.now().toString(36),label};
+  if(ch==="email"){obj.from_email=g("addr");if(!obj.from_email){toast("Enter a from email","err");return;}}
+  if(ch==="instagram"){obj.handle=igClean(g("handle"));if(!obj.handle){toast("Enter a handle","err");return;}}
+  if(ch==="linkedin"){obj.profile=g("profile");}
+  if(ch==="sms"){obj.number=g("number");if(!obj.number){toast("Enter a number","err");return;}}
+  a[ch]=a[ch]||[];a[ch].push(obj);a.active=a.active||{};if(!a.active[ch])a.active[ch]=obj.id;acctSave(a);toast("Account added","ok");render();
+}
+function setActive(ch,id){const a=acctAll();a.active=a.active||{};a.active[ch]=id;acctSave(a);toast("Active account set","ok");render();}
+function delAcct(ch,id){const a=acctAll();a[ch]=(a[ch]||[]).filter(x=>x.id!==id);if(a.active&&a.active[ch]===id)delete a.active[ch];acctSave(a);render();}
+function saveBooking(){const a=acctAll();a.booking=$("#ac-booking").value.trim();acctSave(a);toast("Booking link saved","ok");}
 
 /* ============ SETTINGS ============ */
 function viewSettings(){
-  const o=state.org||{};
-  return `
-  <div class="h1">Settings</div>
-  <div class="sub">Sending identity &amp; compliance</div>
+  const o=state.org||{};const notifOn=("Notification"in window)&&Notification.permission==="granted";
+  return `<div class="h1">Settings</div><div class="sub">Sending identity &amp; compliance</div>
   <div class="card">
     <div class="field"><label>From name</label><input id="s-fromname" value="${esc(o.from_name||"CeasAI")}"/></div>
-    <div class="field"><label>From email (your Gmail SMTP sender)</label><input id="s-fromemail" value="${esc(o.from_email||"ceasai.pro@gmail.com")}"/></div>
+    <div class="field"><label>Default from email</label><input id="s-fromemail" value="${esc(o.from_email||"ceasai.pro@gmail.com")}"/></div>
     <div class="field"><label>Reply-to (optional)</label><input id="s-replyto" value="${esc(o.reply_to||"")}"/></div>
-    <div class="field"><label>Mailing address (required by law on every email)</label><input id="s-addr" value="${esc(o.mailing_address||"CeasAI — Metro Atlanta, GA 30092")}"/></div>
+    <div class="field"><label>Mailing address (required by law on every email)</label><input id="s-addr" value="${esc(o.mailing_address||"CeasAI - Metro Atlanta GA 30092")}"/></div>
     <div class="field"><label>Daily send cap</label><input id="s-cap" type="number" value="${esc(o.daily_cap||100)}"/></div>
     <button class="btn primary block" onclick="saveSettings(this)">Save settings</button>
   </div>
-  <div class="card">
-    <div style="font-weight:800;margin-bottom:6px">Email engine</div>
-    <div class="mut" style="font-size:13px">Sends run through the Supabase <b>send-campaign</b> edge function using Gmail SMTP. Credentials live only as Supabase secrets — never in this app. The footer + unsubscribe link are appended automatically for CAN-SPAM compliance.</div>
+  <div class="card"><div style="font-weight:800;margin-bottom:6px">Notifications</div>
+    <div class="mut" style="font-size:13px;margin-bottom:10px">Desktop alerts for new warm leads &amp; replies while the app is open. ${notifOn?"<b style='color:var(--good)'>On.</b>":""}</div>
+    ${notifOn?"":`<button class="btn block" onclick="enableNotifs()">🔔 Enable desktop notifications</button>`}
   </div>
-  <div class="card">
-    <div style="font-weight:800;margin-bottom:6px">Data</div>
-    <div class="mut" style="font-size:13px;margin-bottom:10px">${num(state.contacts.length)} leads loaded · ${num(state.contacts.filter(c=>c.source==="mindbody").length)} from Mindbody · ${num(state.metrics.inbound)} warm inbound.</div>
-    <button class="btn block" onclick="navigate('leads')">Manage leads &amp; segments →</button>
-  </div>
+  <div class="card"><div style="font-weight:800;margin-bottom:6px">Email engine</div>
+    <div class="mut" style="font-size:13px">Sends run through the Supabase <b>send-campaign</b> edge function using Gmail SMTP. Credentials live only as Supabase secrets. Footer + unsubscribe auto-appended (CAN-SPAM).</div></div>
+  <div class="card"><div style="font-weight:800;margin-bottom:6px">Data</div>
+    <div class="mut" style="font-size:13px;margin-bottom:10px">${num(state.contacts.length)} leads · ${num(state.contacts.filter(c=>c.source==="mindbody").length)} Mindbody · ${num(state.metrics.inbound)} warm inbound.</div>
+    <button class="btn block" onclick="navigate('leads')">Manage leads &amp; segments →</button></div>
   <button class="btn ghost block" style="border-color:var(--bad);color:var(--bad)" onclick="signOut()">Sign out</button>`;
 }
 async function saveSettings(btn){
   btn.disabled=true;const o=btn.textContent;btn.textContent="Saving…";
-  const patch={
-    from_name:$("#s-fromname").value.trim()||null,
-    from_email:$("#s-fromemail").value.trim()||null,
-    reply_to:$("#s-replyto").value.trim()||null,
-    mailing_address:$("#s-addr").value.trim()||null,
-    daily_cap:parseInt($("#s-cap").value)||100,
-    email_provider:"smtp"
-  };
+  const patch={from_name:$("#s-fromname").value.trim()||null,from_email:$("#s-fromemail").value.trim()||null,
+    reply_to:$("#s-replyto").value.trim()||null,mailing_address:$("#s-addr").value.trim()||null,
+    daily_cap:parseInt($("#s-cap").value)||100,email_provider:"smtp"};
   const {error}=await sb.from("orgs").update(patch).eq("id",state.org.id);
   if(error){toastErr(error);btn.disabled=false;btn.textContent=o;return;}
   Object.assign(state.org,patch);toast("Saved","ok");btn.disabled=false;btn.textContent=o;

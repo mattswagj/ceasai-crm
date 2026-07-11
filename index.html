@@ -1,2340 +1,606 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#0e0f13" />
-<title>CeasAI CRM</title>
-<!-- v3.0: analytics dashboard + lead pipeline + follow-up flow + bulk email (ProtiqAI SMTP) + Hunter enrichment + mobile-first -->
-<link rel="manifest" href="manifest.json" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e0f13'/%3E%3Ctext x='32' y='44' font-size='34' font-family='Georgia' font-weight='bold' text-anchor='middle' fill='%23d4af37'%3EC%3C/text%3E%3C/svg%3E" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b0f1a"/>
+<title>CeasAI Outreach</title>
+<link rel="manifest" href="manifest.json"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --bg:#0e0f13; --panel:#151821; --panel2:#1b1f2a; --panel3:#222735;
-  --border:#2a2f3d; --border2:#353b4c;
-  --text:#e8eaf0; --muted:#9aa2b1; --muted2:#6b7280;
-  --gold:#d4af37; --gold2:#f2d98a; --goldsoft:rgba(212,175,55,.14);
-  --red:#e5484d; --green:#30a46c; --blue:#3b82f6; --purple:#8b5cf6; --amber:#f5a524; --cyan:#22b8cf;
-  --radius:12px; --radius2:16px;
-  --shadow:0 10px 30px rgba(0,0,0,.35);
-  font-synthesis:none;
+  --bg:#0b0f1a; --panel:#141a2b; --panel2:#1b2338; --line:#26304a;
+  --txt:#eef2fb; --mut:#93a0bd; --accent:#5b8cff; --accent2:#7c4dff;
+  --good:#2fd07a; --warn:#ffb020; --bad:#ff5d6c; --chip:#233054;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{
-  background:radial-gradient(1200px 600px at 80% -10%,rgba(212,175,55,.06),transparent 60%),var(--bg);
-  color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-  font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
-}
-a{color:var(--gold2);text-decoration:none}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
 button{font-family:inherit}
-.hidden{display:none!important}
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:#2a2f3d;border-radius:8px}
-::-webkit-scrollbar-track{background:transparent}
-
-/* ---------- Buttons ---------- */
-.btn{display:inline-flex;align-items:center;gap:7px;justify-content:center;border:1px solid var(--border2);
-  background:var(--panel2);color:var(--text);padding:8px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;white-space:nowrap}
-.btn:hover{border-color:#454b5e;background:var(--panel3)}
-.btn.primary{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1200;border:none}
-.btn.primary:hover{filter:brightness(1.06)}
-.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
-.btn.ghost:hover{color:var(--text);background:var(--panel2)}
-.btn.danger{color:#ff8b8f;border-color:#5a2b2d;background:#2a1618}
-.btn.danger:hover{background:#3a1c1e}
-.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
-.btn.icon{padding:7px;width:34px;height:34px}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;border:1px solid var(--border2);background:var(--panel2)}
-
-/* ---------- Inputs ---------- */
-input,select,textarea{width:100%;background:var(--panel);border:1px solid var(--border2);color:var(--text);
-  padding:9px 11px;border-radius:9px;font-size:13px;outline:none;transition:.15s}
-input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--goldsoft)}
-textarea{resize:vertical;min-height:70px}
-label{display:block;font-size:12px;color:var(--muted);margin:0 0 5px;font-weight:600}
-.field{margin-bottom:13px}
-.row{display:flex;gap:12px}
-.row>*{flex:1}
-
-/* ---------- Auth ---------- */
-#auth{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
-.auth-card{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius2);
-  padding:30px 28px;box-shadow:var(--shadow)}
-.brand{display:flex;align-items:center;gap:11px;margin-bottom:4px}
-.logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#1a1d26,#0b0d12);
-  display:grid;place-items:center;font-family:Georgia,serif;font-weight:700;color:var(--gold);font-size:22px;border:1px solid var(--border2)}
-.brand h1{font-size:19px;margin:0;letter-spacing:.02em}
-.brand .sub{color:var(--muted);font-size:12px}
-.auth-tabs{display:flex;gap:6px;margin:22px 0 18px;background:var(--panel2);padding:4px;border-radius:11px}
-.auth-tabs button{flex:1;padding:8px;border:none;background:transparent;color:var(--muted);border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
-.auth-tabs button.active{background:var(--panel3);color:var(--text)}
-.msg{font-size:12.5px;padding:9px 11px;border-radius:9px;margin-top:12px}
-.msg.err{background:#2a1618;color:#ff9296;border:1px solid #5a2b2d}
-.msg.ok{background:#12261c;color:#57d99a;border:1px solid #1f5138}
-
-/* ---------- App shell ---------- */
-#app{display:none;min-height:100dvh}
-.shell{display:grid;grid-template-columns:236px 1fr;min-height:100dvh}
-.sidebar{background:linear-gradient(180deg,#12141b,#0e0f13);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;position:sticky;top:0;height:100dvh}
-.side-brand{display:flex;align-items:center;gap:10px;padding:18px 18px 14px}
-.side-brand .logo{width:34px;height:34px;font-size:18px}
-.side-brand h1{font-size:15px;margin:0}
-.side-brand .sub{font-size:10.5px;color:var(--muted)}
-.nav{padding:8px;flex:1;overflow:auto}
-.nav a{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;color:var(--muted);
-  font-weight:600;cursor:pointer;font-size:13.5px;margin-bottom:2px}
-.nav a:hover{background:var(--panel2);color:var(--text)}
-.nav a.active{background:var(--goldsoft);color:var(--gold2)}
-.nav a .ic{width:18px;text-align:center;opacity:.9}
-.nav a .badge{margin-left:auto;background:var(--panel3);color:var(--muted);border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
-.nav a.active .badge{background:var(--gold);color:#1a1200}
-.side-foot{padding:12px;border-top:1px solid var(--border)}
-.user-box{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px}
-.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold2),var(--gold));
-  color:#1a1200;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
-.user-box .nm{font-size:12.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.user-box .em{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-.main{min-width:0;display:flex;flex-direction:column}
-.topbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--border);
-  position:sticky;top:0;background:rgba(14,15,19,.82);backdrop-filter:blur(10px);z-index:20}
-.topbar h2{margin:0;font-size:18px;font-weight:700}
-.topbar .spacer{flex:1}
-.search{position:relative;max-width:280px;flex:1}
-.search input{padding-left:32px}
-.search .si{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)}
-.content{padding:22px;overflow:auto}
-.menu-btn{display:none}
-
-/* ---------- Cards / grid ---------- */
-.grid{display:grid;gap:14px}
-.cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-.stat{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--border);border-radius:var(--radius);padding:16px 17px}
-.stat .k{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:7px}
-.stat .v{font-size:27px;font-weight:800;margin-top:7px;letter-spacing:-.01em}
-.stat .d{font-size:11.5px;color:var(--muted);margin-top:3px}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 17px}
-.panel h3{margin:0 0 13px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
-.panel h3 .sub{font-weight:500;color:var(--muted);font-size:12px}
-
-/* ---------- Table ---------- */
-.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel)}
-table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
-th{ text-align:left;padding:11px 14px;color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;
-  letter-spacing:.04em;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
-th:hover{color:var(--text)}
-td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tbody tr{cursor:pointer;transition:.1s}
-tbody tr:hover{background:var(--panel2)}
-.cell-main{font-weight:600}
-.cell-sub{color:var(--muted);font-size:11.5px}
-.muted{color:var(--muted)}
-.right{text-align:right}
+.hide{display:none!important}
+.mut{color:var(--mut)}
 .center{text-align:center}
-.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-.toolbar .spacer{flex:1}
-.empty{text-align:center;padding:46px 20px;color:var(--muted)}
-.empty .big{font-size:34px;margin-bottom:8px;opacity:.5}
-
-/* status pills */
-.st{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;display:inline-block}
-.st-New{background:#1e293b;color:#93b4ff}
-.st-Contacted{background:#2a2140;color:#c4b5fd}
-.st-Qualified{background:#0f2e29;color:#5eead4}
-.st-Customer{background:#12261c;color:#57d99a}
-.st-Lost{background:#2a1618;color:#ff9296}
-.st-Proposal{background:#2e2410;color:#f5cf72}
-.st-Won{background:#12261c;color:#57d99a}
-.tag{background:var(--panel3);color:var(--muted);border-radius:6px;padding:1px 7px;font-size:11px;margin:1px 3px 1px 0;display:inline-block}
-
-/* ---------- Kanban ---------- */
-.kanban{display:flex;gap:13px;overflow-x:auto;padding-bottom:10px}
-.kcol{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);min-width:250px;width:250px;flex:none;display:flex;flex-direction:column;max-height:calc(100dvh - 190px)}
-.kcol.drag-over{border-color:var(--gold);box-shadow:0 0 0 2px var(--goldsoft)}
-.kcol-h{padding:12px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;position:sticky;top:0}
-.kcol-h .dot{width:9px;height:9px;border-radius:50%}
-.kcol-h .t{font-weight:700;font-size:13px}
-.kcol-h .c{margin-left:auto;color:var(--muted);font-size:11.5px}
-.kcol-h .sum{color:var(--gold2);font-size:11px;font-weight:700}
-.kbody{padding:10px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:9px}
-.kcard{background:var(--panel2);border:1px solid var(--border2);border-radius:10px;padding:11px;cursor:grab}
-.kcard:active{cursor:grabbing}
-.kcard.dragging{opacity:.45}
-.kcard .kt{font-weight:700;font-size:13px;margin-bottom:5px}
-.kcard .kv{color:var(--gold2);font-weight:800;font-size:13px}
-.kcard .kmeta{color:var(--muted);font-size:11.5px;margin-top:6px;display:flex;justify-content:space-between;gap:6px}
-
-/* ---------- Modal / drawer ---------- */
-#modal-root .overlay{position:fixed;inset:0;background:rgba(4,5,8,.6);backdrop-filter:blur(3px);z-index:100;
-  display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
-.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius2);width:100%;max-width:520px;
-  box-shadow:var(--shadow);animation:pop .16s ease}
-.modal.wide{max-width:720px}
-@keyframes pop{from{transform:translateY(8px);opacity:.6}to{transform:none;opacity:1}}
-.modal-h{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)}
-.modal-h h3{margin:0;font-size:16px}
-.modal-h .x{margin-left:auto;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;padding:2px 6px;border-radius:7px}
-.modal-h .x:hover{background:var(--panel2);color:var(--text)}
-.modal-b{padding:18px}
-.modal-f{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
-.drawer .modal{max-width:560px;margin-left:auto;min-height:calc(100dvh - 0px);border-radius:0;align-self:stretch}
-.drawer .overlay{padding:0;justify-content:flex-end;align-items:stretch}
-
-.timeline{list-style:none;padding:0;margin:0}
-.timeline li{position:relative;padding:0 0 16px 22px;border-left:2px solid var(--border);margin-left:5px}
-.timeline li:last-child{border-color:transparent}
-.timeline .tdot{position:absolute;left:-7px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--panel3);border:2px solid var(--gold)}
-.timeline .th{font-weight:700;font-size:12.5px}
-.timeline .tm{color:var(--muted);font-size:11px}
-.timeline .tb{font-size:12.5px;margin-top:3px;color:#c9cdd8;white-space:pre-wrap}
-
-.subtabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border)}
-.subtabs button{background:none;border:none;color:var(--muted);padding:8px 3px;margin-right:14px;cursor:pointer;font-weight:600;font-size:13px;border-bottom:2px solid transparent}
-.subtabs button.active{color:var(--gold2);border-color:var(--gold)}
-
-.toast-wrap{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:8px}
-.toast{background:var(--panel3);border:1px solid var(--border2);border-left:3px solid var(--gold);padding:11px 15px;border-radius:10px;
-  font-size:13px;box-shadow:var(--shadow);animation:pop .16s ease;max-width:320px}
-.toast.err{border-left-color:var(--red)}
-.toast.ok{border-left-color:var(--green)}
-
-.dashgrid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
-.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-.bar-row .bl{width:92px;font-size:12px;color:var(--muted);flex:none}
-.bar-track{flex:1;background:var(--panel2);border-radius:6px;height:20px;overflow:hidden}
-.bar-fill{height:100%;border-radius:6px;transition:width .4s}
-.bar-row .bn{width:32px;text-align:right;font-weight:700;font-size:12.5px}
-.spark{display:flex;align-items:flex-end;gap:4px;height:60px}
-/* ---------- ✨ Email generator ---------- */
-.eg-chips{display:flex;flex-wrap:wrap;gap:6px}
-.eg-chip{padding:6px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--panel2);color:var(--muted);
-  cursor:pointer;font-size:12px;font-weight:600;transition:.15s;user-select:none}
-.eg-chip:hover{color:var(--text);border-color:#454b5e}
-.eg-chip.on{background:var(--goldsoft);border-color:var(--gold);color:var(--gold2)}
-.eg-preview{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:2px}
-.eg-preview label{margin-top:0}
-input.eg-subject{font-weight:700;font-size:14px}
-textarea.eg-body{min-height:240px;font-size:13px;line-height:1.55;white-space:pre-wrap}
-.eg-meta{font-size:11.5px;color:var(--muted);margin-top:9px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.eg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-@media(max-width:560px){.eg-actions .btn{flex:1}}
-
-/* new status pills */
-.st-Replied{background:#0f2e29;color:#5eead4}
-.st-Meeting{background:#10233a;color:#7dd3fc}
-.st-Won{background:#12261c;color:#57d99a}
-.st-Lost{background:#2a1618;color:#ff9296}
-
-/* funnel */
-.funnel{display:flex;flex-direction:column;gap:6px}
-.fn-row{display:flex;align-items:center;gap:10px}
-.fn-bar{height:30px;border-radius:8px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;color:#0b0d12;font-weight:800;font-size:12px;min-width:34px;transition:width .4s}
-.fn-lbl{width:88px;flex:none;font-size:12px;color:var(--muted)}
-.fn-n{width:34px;text-align:right;font-weight:700;font-size:12.5px}
-
-/* activity sparkline */
-.spark{display:flex;align-items:flex-end;gap:3px;height:64px;margin-top:6px}
-.spark .sb{flex:1;background:var(--goldsoft);border:1px solid var(--gold);border-bottom:none;border-radius:4px 4px 0 0;min-height:2px;position:relative}
-.spark .sb.zero{background:var(--panel2);border-color:var(--border2)}
-.spark-x{display:flex;gap:3px;margin-top:4px}
-.spark-x span{flex:1;text-align:center;font-size:9px;color:var(--muted2)}
-
-/* selection + campaign */
-.selbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;background:var(--panel3);border:1px solid var(--border2);border-radius:10px;padding:9px 12px;margin-bottom:12px;flex-wrap:wrap}
-.selbar b{color:var(--gold2)}
-.ckbox{width:18px;height:18px;flex:none;cursor:pointer}
-.emaildot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
-.ed-ok{background:var(--green)} .ed-no{background:var(--muted2)} .ed-bad{background:var(--red)} .ed-unsub{background:var(--amber)}
-.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--border2);background:var(--panel2)}
-.advbtn{border:1px solid var(--border2);background:var(--panel3);color:var(--gold2);border-radius:8px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;width:100%;margin-top:8px}
-.advbtn:hover{border-color:var(--gold)}
-.banner{border-radius:10px;padding:10px 13px;font-size:12.5px;margin-bottom:12px;border:1px solid}
-.banner.warn{background:#2e2410;border-color:#5a4a1e;color:#f5cf72}
-.banner.info{background:#12233a;border-color:#274b73;color:#8fb4ea}
-
-/* FAB + bottom nav (mobile only) */
-.fab{display:none;position:fixed;right:16px;bottom:78px;width:56px;height:56px;border-radius:50%;z-index:50;
-  background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1200;border:none;font-size:28px;font-weight:400;
-  box-shadow:0 8px 22px rgba(0,0,0,.45);cursor:pointer;line-height:1}
-.bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:45;background:rgba(18,20,27,.96);
-  backdrop-filter:blur(10px);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom));
-  grid-template-columns:repeat(5,1fr)}
-.bottomnav a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;color:var(--muted);font-size:10px;font-weight:600;border-radius:9px;cursor:pointer}
-.bottomnav a .bic{font-size:19px;line-height:1}
-.bottomnav a.active{color:var(--gold2);background:var(--goldsoft)}
-
-@media(max-width:860px){
-  .shell{grid-template-columns:1fr}
-  .sidebar{position:fixed;left:0;top:0;bottom:0;width:250px;z-index:60;transform:translateX(-105%);transition:.2s;box-shadow:var(--shadow)}
-  .sidebar.open{transform:none}
-  .menu-btn{display:inline-flex}
-  .dashgrid{grid-template-columns:1fr}
-  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:55;display:none}
-  .scrim.show{display:block}
-  .search{max-width:none}
-  .bottomnav{display:grid}
-  .fab{display:flex;align-items:center;justify-content:center}
-  .content{padding:16px 14px 96px}
-  .topbar{padding:12px 14px}
-  #new-btn{display:none}
-}
-@media(max-width:560px){
-  .cards{grid-template-columns:1fr 1fr}
-  .stat .v{font-size:22px}
-  .stat{padding:13px 13px}
-  .btn{padding:10px 14px}
-  .btn.sm{padding:7px 11px}
-  /* tables -> stacked cards */
-  table.cardify{min-width:0}
-  table.cardify thead{display:none}
-  table.cardify,table.cardify tbody,table.cardify tr,table.cardify td{display:block;width:100%}
-  table.cardify tr{border:1px solid var(--border);border-radius:12px;margin-bottom:10px;padding:6px 4px;background:var(--panel)}
-  table.cardify td{border:none;padding:6px 12px;display:flex;justify-content:space-between;gap:12px;align-items:center}
-  table.cardify td::before{content:attr(data-label);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;flex:none}
-  table.cardify td[data-label=""]::before,table.cardify td.nolabel::before{content:""}
-  table.cardify td.right{justify-content:flex-end}
-  .table-wrap{border:none;background:transparent;overflow:visible}
-  .kcol{min-width:82vw;width:82vw}
-  .modal-b{padding:14px}
-  .eg-actions .btn{flex:1 1 46%}
-}
+input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  border-radius:12px;padding:12px 13px;font-size:15px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:130px;line-height:1.5}
+label{display:block;font-size:12.5px;color:var(--mut);margin:0 0 6px 2px;font-weight:600;letter-spacing:.02em}
+.field{margin-bottom:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:12px;
+  padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer;background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff}
+.btn.good{background:var(--good);border:none;color:#06231a}
+.btn.ghost{background:transparent}
+.btn.block{width:100%}
+.btn.lg{padding:16px;font-size:16.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--line);
+  color:var(--txt);border-radius:999px;padding:8px 13px;font-size:13.5px;cursor:pointer;font-weight:600}
+.chip.on{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff}
+.wrap{max-width:760px;margin:0 auto;padding:16px 15px 96px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px}
+.h1{font-size:20px;font-weight:800;margin:2px 0 3px}
+.sub{color:var(--mut);font-size:13.5px;margin:0 0 14px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
+.metric{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);
+  border-radius:18px;padding:16px 12px;text-align:center}
+.metric .n{font-size:34px;font-weight:900;line-height:1;letter-spacing:-.02em}
+.metric .l{font-size:11.5px;color:var(--mut);margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.metric.em .n{color:var(--accent)} .metric.ig .n{color:var(--accent2)} .metric.rp .n{color:var(--good)}
+.bar{height:10px;background:var(--panel2);border-radius:6px;overflow:hidden}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.brk{display:flex;align-items:center;gap:10px;margin:9px 0;font-size:13.5px}
+.brk .nm{width:120px;flex:none;color:var(--mut);font-weight:600}
+.brk .ct{width:38px;flex:none;text-align:right;font-weight:800}
+.brk .bw{flex:1}
+.lead{border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin-bottom:9px;background:var(--panel2)}
+.lead .nm{font-weight:800;font-size:15px}
+.lead .meta{color:var(--mut);font-size:12.5px;margin-top:3px}
+.tag{display:inline-block;background:var(--chip);border-radius:8px;padding:2px 8px;font-size:11px;color:var(--mut);margin:4px 4px 0 0}
+.tag.em{color:var(--good)} .tag.ig{color:var(--accent2)}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#000d;color:#fff;
+  padding:11px 16px;border-radius:12px;font-size:14px;z-index:99;max-width:90vw;text-align:center;border:1px solid var(--line)}
+.toast.err{background:#3a0d14;border-color:var(--bad)} .toast.ok{background:#0b2c1f;border-color:var(--good)}
+.nav{position:fixed;left:0;right:0;bottom:0;background:#0c1120ee;backdrop-filter:blur(10px);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(5,1fr);z-index:50}
+.nav button{background:none;border:none;color:var(--mut);padding:9px 2px 12px;font-size:10.5px;font-weight:700;
+  display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+.nav button .ic{font-size:19px}
+.nav button.on{color:var(--accent)}
+.top{display:flex;align-items:center;gap:10px;max-width:760px;margin:0 auto;padding:14px 15px 4px}
+.top .brand{font-weight:900;font-size:16px;letter-spacing:.02em}
+.top .brand span{color:var(--accent)}
+.banner{border-radius:12px;padding:11px 13px;font-size:13px;margin-bottom:12px;border:1px solid}
+.banner.warn{background:#2a220a;border-color:var(--warn);color:#ffd98a}
+.banner.ok{background:#0b2c1f;border-color:var(--good);color:#9df3c8}
+.banner.info{background:#101a33;border-color:var(--accent);color:#bcd0ff}
+.big{font-size:42px;font-weight:900}
+.qbox{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px;white-space:pre-wrap;
+  font-size:15px;line-height:1.55}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.kv:last-child{border:none}
+.stepper{display:flex;align-items:center;gap:14px;justify-content:center}
+.stepper button{width:44px;height:44px;border-radius:12px;font-size:22px}
+.modal{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:90}
+.modal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:20px 20px 0 0;padding:18px;
+  width:100%;max-width:760px;max-height:90vh;overflow:auto}
+@media(min-width:640px){.modal{align-items:center}.modal .sheet{border-radius:20px}}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 
 <!-- ============ AUTH ============ -->
-<div id="auth">
-  <div class="auth-card">
-    <div class="brand">
-      <div class="logo">C</div>
-      <div><h1>CeasAI CRM</h1><div class="sub">Contacts · Deals · Outreach</div></div>
+<div id="auth" class="hide">
+  <div class="wrap" style="max-width:400px;padding-top:12vh">
+    <div class="center" style="margin-bottom:18px">
+      <div class="brand" style="font-size:26px;font-weight:900">Ceas<span style="color:var(--accent)">AI</span></div>
+      <div class="mut" style="margin-top:6px">Outreach — sign in</div>
     </div>
-    <div class="auth-tabs">
-      <button id="tab-login" class="active" onclick="setAuthMode('login')">Log in</button>
-      <button id="tab-signup" onclick="setAuthMode('signup')">Sign up</button>
+    <div class="card">
+      <form onsubmit="return doAuth(event)">
+        <div class="field"><label>Email</label><input id="a-email" type="email" autocomplete="username" required/></div>
+        <div class="field"><label>Password</label><input id="a-pass" type="password" autocomplete="current-password" required/></div>
+        <div id="auth-msg"></div>
+        <button id="a-submit" class="btn primary block lg" type="submit">Sign in</button>
+      </form>
     </div>
-    <form id="auth-form" onsubmit="return doAuth(event)">
-      <div class="field signup-only hidden">
-        <label>Your name</label>
-        <input id="a-name" placeholder="Jane Doe" autocomplete="name" />
-      </div>
-      <div class="field signup-only hidden">
-        <label>Company / workspace name</label>
-        <input id="a-org" placeholder="Acme Inc." />
-      </div>
-      <div class="field">
-        <label>Email</label>
-        <input id="a-email" type="email" placeholder="you@company.com" autocomplete="email" required />
-      </div>
-      <div class="field">
-        <label>Password</label>
-        <input id="a-pass" type="password" placeholder="••••••••" autocomplete="current-password" required minlength="6" />
-      </div>
-      <button class="btn primary" style="width:100%" id="a-submit" type="submit">Log in</button>
-      <div id="auth-msg"></div>
-    </form>
   </div>
 </div>
 
 <!-- ============ APP ============ -->
-<div id="app">
-  <div class="scrim" id="scrim" onclick="toggleNav(false)"></div>
-  <div class="shell">
-    <aside class="sidebar" id="sidebar">
-      <div class="side-brand">
-        <div class="logo">C</div>
-        <div><h1>CeasAI CRM</h1><div class="sub" id="org-name">workspace</div></div>
-      </div>
-      <nav class="nav" id="nav"></nav>
-      <div class="side-foot">
-        <div class="user-box">
-          <div class="avatar" id="u-avatar">?</div>
-          <div style="min-width:0">
-            <div class="nm" id="u-name">—</div>
-            <div class="em" id="u-email">—</div>
-          </div>
-          <button class="btn ghost icon" title="Sign out" onclick="signOut()" style="margin-left:auto">⏻</button>
-        </div>
-      </div>
-    </aside>
-    <div class="main">
-      <div class="topbar">
-        <button class="btn ghost icon menu-btn" onclick="toggleNav(true)">☰</button>
-        <h2 id="page-title">Dashboard</h2>
-        <div class="spacer"></div>
-        <div class="search" id="global-search-wrap">
-          <span class="si">⌕</span>
-          <input id="global-search" placeholder="Search…" oninput="onGlobalSearch(this.value)" />
-        </div>
-        <button class="btn primary" id="new-btn" onclick="quickNew()">+ New</button>
-      </div>
-      <div class="content" id="view"></div>
-    </div>
+<div id="app" class="hide">
+  <div class="top">
+    <div class="brand">Ceas<span>AI</span> Outreach</div>
+    <button class="btn ghost" style="margin-left:auto;padding:8px 12px" onclick="signOut()" title="Sign out">⏻</button>
   </div>
-  <button class="fab" id="fab" onclick="quickNew()" title="Quick add">＋</button>
-  <nav class="bottomnav" id="bottomnav"></nav>
+  <div id="view" class="wrap"></div>
+  <div class="nav" id="nav"></div>
 </div>
 
-<div id="modal-root"></div>
-<div class="toast-wrap" id="toasts"></div>
-
 <script>
-/* ============================================================
-   CONFIG
-============================================================ */
+/* ============ CONFIG ============ */
 const SUPABASE_URL = "https://dxctcajmleurhwhbnqyj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable__u2lblfYFekZgYJknH3PtQ_J20vGVF9";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ============================================================
-   CONSTANTS
-============================================================ */
-// contacts.status IS the lead pipeline stage.
-const CONTACT_STATUSES = ["New","Contacted","Replied","Meeting","Proposal","Won","Lost"];
-const LEAD_STAGES = CONTACT_STATUSES;
-const DEAL_STAGES = ["New","Contacted","Qualified","Proposal","Won","Lost"];
-const STAGE_COLORS = {New:"#3b82f6",Contacted:"#8b5cf6",Qualified:"#22b8cf",Proposal:"#f5a524",Won:"#30a46c",Lost:"#e5484d"};
-const STATUS_COLORS = {New:"#3b82f6",Contacted:"#8b5cf6",Replied:"#22b8cf",Meeting:"#38bdf8",Proposal:"#f5a524",Won:"#30a46c",Lost:"#e5484d"};
-const TASK_TYPES = ["call","email","meeting","follow-up","todo"];
-const CHANNELS = ["email","call","text","meeting","instagram_dm"];
-const SOURCES = ["Instagram","LinkedIn","Referral","Website","Cold email","Cold call","Event","Other"];
-const CHANNEL_LABELS = {email:"Email",call:"Call",text:"Text",meeting:"Meeting",instagram_dm:"Instagram DM"};
-const NAV = [
-  {id:"dashboard",label:"Dashboard",ic:"◧",m:1},
-  {id:"pipeline",label:"Pipeline",ic:"≣",m:1},
-  {id:"outreach",label:"Outreach",ic:"✉",m:1},
-  {id:"daily",label:"Daily",ic:"⚡",m:1},
-  {id:"campaigns",label:"Campaigns",ic:"📣",m:1},
-  {id:"contacts",label:"Leads",ic:"◔",m:1},
-  {id:"deals",label:"Deals",ic:"⛁"},
-  {id:"tasks",label:"Tasks",ic:"✓"},
-  {id:"companies",label:"Companies",ic:"▤"},
-  {id:"settings",label:"Settings",ic:"⚙"},
-];
+const BIZ_TYPES = ["Gym","CrossFit","MMA / Boxing","Yoga / Pilates","Personal Training","Boutique Studio","Wellness / Spa","Other"];
+const TEMPLATE_B = {
+  subject: "quick question about {{business}}",
+  body: `Hi there,
 
-/* ============================================================
-   STATE
-============================================================ */
+Quick question — is {{business}} currently doing anything to automatically follow up with new leads and website inquiries?
+
+I build simple AI tools for {{city}} fitness & wellness businesses that capture every inquiry and reply (and book them) in seconds — so you stop losing prospects to slow follow-up.
+
+Worth a quick look?`
+};
+
+/* ============ STATE ============ */
 const state = {
   user:null, profile:null, org:null,
   view:"dashboard",
-  data:{contacts:[],companies:[],deals:[],tasks:[],activities:[],templates:[],campaigns:[],emailEvents:[]},
-  ui:{contactSearch:"",contactStatus:"",contactSort:{k:"updated_at",dir:-1},
-      companySearch:"", taskFilter:"open", global:"",
-      outreachTab:"leads", outreach:{quick:"all",channel:"",status:""},
-      pipeSort:"recent",
-      sel:new Set(),                       // selected contact ids (campaigns/enrich)
-      campaign:{stage:"",tag:"",search:"",onlyEmailable:false}}
+  contacts:[],
+  metrics:{emails:0, dms:0, responses:0, inbound:0},
+  segment:{type:"", state:"", hasEmail:false, warm:false},
+  dm:{queue:[], idx:0, text:""},
+  busy:false,
 };
 
-/* ============================================================
-   HELPERS
-============================================================ */
-const $ = s=>document.querySelector(s);
-const esc = s => (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const byId = (arr,id)=>arr.find(x=>x.id===id);
-function initials(n){n=(n||"").trim();if(!n)return "?";const p=n.split(/\s+/);return ((p[0][0]||"")+(p[1]?p[1][0]:"")).toUpperCase();}
-function fmtMoney(v){v=Number(v||0);return "$"+v.toLocaleString("en-US",{maximumFractionDigits:0});}
-function fmtDate(d){if(!d)return "";const dt=(typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d))?new Date(d+"T00:00:00"):new Date(d);if(isNaN(dt))return "";return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}
-function fmtDateTime(d){if(!d)return "";const dt=new Date(d);return dt.toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}
-function relTime(d){if(!d)return "";const s=(Date.now()-new Date(d))/1000;if(s<60)return "just now";if(s<3600)return Math.floor(s/60)+"m ago";if(s<86400)return Math.floor(s/3600)+"h ago";if(s<604800)return Math.floor(s/86400)+"d ago";return fmtDate(d);}
-function todayStr(){return new Date().toISOString().slice(0,10);}
-function isOverdue(d){return d && d<todayStr();}
-function contactName(c){if(!c)return "";return ((c.first_name||"")+" "+(c.last_name||"")).trim()||c.email||"Unnamed";}
+/* ============ HELPERS ============ */
+const $  = (s,r=document)=>r.querySelector(s);
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(m,cls=""){let t=document.createElement("div");t.className="toast "+cls;t.textContent=m;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),2600);}
+function toastErr(e){toast((e&&e.message)||String(e),"err");}
 function igHandle(v){return String(v||"").trim().replace(/^@+/,"").replace(/^https?:\/\/(www\.)?instagram\.com\//i,"").replace(/[/?#].*$/,"");}
-function companyName(id){const c=byId(state.data.companies,id);return c?c.name:"";}
-function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+function num(n){return (n||0).toLocaleString();}
+function isInbound(c){return String(c&&c.source||"").indexOf("IG keyword")===0;}
+function pick(a){return a[Math.floor(Math.random()*a.length)];}
+function lsKey(k){return "ceasai_"+k+"_"+(state.user?state.user.id:"anon");}
+function tplGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("tplB")));if(v&&v.subject)return v;}catch(e){}return {...TEMPLATE_B};}
+function tplSet(o){try{localStorage.setItem(lsKey("tplB"),JSON.stringify(o));}catch(e){}}
 
-function toast(msg,type){
-  const t=document.createElement("div");t.className="toast "+(type||"");t.textContent=msg;
-  $("#toasts").appendChild(t);setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},2600);
-}
-function toastErr(e){console.error(e);toast((e&&e.message)||String(e),"err");}
-
-/* ============================================================
-   AUTH
-============================================================ */
+/* ============ AUTH ============ */
 let authMode="login";
-function setAuthMode(m){authMode=m;
-  $("#tab-login").classList.toggle("active",m==="login");
-  $("#tab-signup").classList.toggle("active",m==="signup");
-  document.querySelectorAll(".signup-only").forEach(e=>e.classList.toggle("hidden",m!=="signup"));
-  $("#a-submit").textContent=m==="login"?"Log in":"Create account";
-  $("#a-pass").setAttribute("autocomplete",m==="login"?"current-password":"new-password");
-  $("#auth-msg").innerHTML="";
-}
 async function doAuth(ev){
   ev.preventDefault();
   const email=$("#a-email").value.trim(), pass=$("#a-pass").value;
-  const btn=$("#a-submit");btn.disabled=true;const orig=btn.textContent;btn.textContent="Please wait…";
+  const btn=$("#a-submit");btn.disabled=true;const o=btn.textContent;btn.textContent="Please wait…";
   const msg=$("#auth-msg");msg.innerHTML="";
   try{
-    if(authMode==="signup"){
-      const {error}=await sb.auth.signUp({email,password:pass,options:{data:{
-        full_name:$("#a-name").value.trim(), org_name:$("#a-org").value.trim()
-      }}});
-      if(error)throw error;
-      const {data:s}=await sb.auth.getSession();
-      if(!s.session){ // email confirmation on
-        msg.innerHTML='<div class="msg ok">Account created. Check your email to confirm, then log in.</div>';
-        btn.disabled=false;btn.textContent=orig;return false;
-      }
-    }else{
-      const {error}=await sb.auth.signInWithPassword({email,password:pass});
-      if(error)throw error;
-    }
+    const {error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error)throw error;
     await boot();
   }catch(e){
-    msg.innerHTML='<div class="msg err">'+esc(e.message||"Something went wrong")+'</div>';
-    btn.disabled=false;btn.textContent=orig;
+    msg.innerHTML='<div class="banner warn">'+esc(e.message||"Sign-in failed")+'</div>';
+    btn.disabled=false;btn.textContent=o;
   }
   return false;
 }
 async function signOut(){await sb.auth.signOut();location.reload();}
+sb.auth.onAuthStateChange((e)=>{if(e==="SIGNED_OUT")location.reload();});
 
-/* ============================================================
-   BOOT / DATA LOADING
-============================================================ */
+/* ============ BOOT / DATA ============ */
 async function boot(){
   const {data:{user}}=await sb.auth.getUser();
-  if(!user){$("#auth").style.display="flex";$("#app").style.display="none";return;}
+  if(!user){$("#auth").classList.remove("hide");$("#app").classList.add("hide");return;}
   state.user=user;
-  // profile + org
-  let {data:prof,error:pe}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();
-  if(pe)console.warn(pe);
-  // Retry once in case the new-user trigger is still creating the profile
+  let {data:prof}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();
   if(!prof){await new Promise(r=>setTimeout(r,900));({data:prof}=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle());}
-  if(!prof){toast("Profile not ready yet — try reloading.","err");}
-  state.profile=prof||{email:user.email,full_name:user.email,org_id:null};
+  state.profile=prof||{email:user.email,org_id:null};
   if(state.profile.org_id){
     const {data:org}=await sb.from("orgs").select("*").eq("id",state.profile.org_id).maybeSingle();
     state.org=org;
   }
-  $("#auth").style.display="none";$("#app").style.display="block";
-  renderChrome();
+  $("#auth").classList.add("hide");$("#app").classList.remove("hide");
   await loadAll();
   navigate(state.view);
 }
 async function loadAll(){
-  const [c,co,d,tk,ac,tp,cp,ee]=await Promise.all([
-    sb.from("contacts").select("*").order("updated_at",{ascending:false}),
-    sb.from("companies").select("*").order("name",{ascending:true}),
-    sb.from("deals").select("*").order("created_at",{ascending:false}),
-    sb.from("tasks").select("*").order("due_date",{ascending:true,nullsFirst:false}),
-    sb.from("activities").select("*").order("occurred_at",{ascending:false}),
-    sb.from("templates").select("*").order("created_at",{ascending:false}),
-    sb.from("campaigns").select("*").order("created_at",{ascending:false}),        // may not exist pre-migration
-    sb.from("email_events").select("*").order("created_at",{ascending:false}).limit(2000),
-  ]);
-  for(const r of [c,co,d,tk,ac,tp]) if(r.error) console.warn(r.error);
-  state.data.contacts=c.data||[];
-  state.data.companies=co.data||[];
-  state.data.deals=d.data||[];
-  state.data.tasks=tk.data||[];
-  state.data.activities=ac.data||[];
-  state.data.templates=tp.data||[];
-  state.data.campaigns=cp.data||[];       // empty until migration-v3 runs
-  state.data.emailEvents=ee.data||[];
-  renderNavBadges();
+  const {data:c}=await sb.from("contacts").select("*").order("company",{ascending:true}).limit(5000);
+  state.contacts=c||[];
+  state.metrics.inbound=state.contacts.filter(isInbound).length;
+  await loadMetrics();
 }
-async function reload(entity){
-  const map={
-    contacts:()=>sb.from("contacts").select("*").order("updated_at",{ascending:false}),
-    companies:()=>sb.from("companies").select("*").order("name",{ascending:true}),
-    deals:()=>sb.from("deals").select("*").order("created_at",{ascending:false}),
-    tasks:()=>sb.from("tasks").select("*").order("due_date",{ascending:true,nullsFirst:false}),
-    activities:()=>sb.from("activities").select("*").order("occurred_at",{ascending:false}),
-    templates:()=>sb.from("templates").select("*").order("created_at",{ascending:false}),
-    campaigns:()=>sb.from("campaigns").select("*").order("created_at",{ascending:false}),
-    emailEvents:()=>sb.from("email_events").select("*").order("created_at",{ascending:false}).limit(2000),
-  };
-  const {data,error}=await map[entity]();
-  if(error){toastErr(error);return;}
-  state.data[entity]=data||[];
-  renderNavBadges();
+async function loadMetrics(){
+  const em = await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");
+  const dm = await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","instagram_dm").eq("status","sent");
+  state.metrics.emails = em.count||0;
+  state.metrics.dms = dm.count||0;
+  state.metrics.responses = (state.org && state.org.responses_count)||0;
 }
-function withOrg(obj){return Object.assign({org_id:state.profile.org_id,owner_id:state.user.id},obj);}
 
-/* ============================================================
-   CHROME (nav, user)
-============================================================ */
-function renderChrome(){
-  $("#org-name").textContent=state.org?state.org.name:"workspace";
-  const nm=state.profile.full_name||state.user.email;
-  $("#u-name").textContent=nm;$("#u-email").textContent=state.user.email;
-  $("#u-avatar").textContent=initials(nm);
-  $("#nav").innerHTML=NAV.map(n=>`<a data-nav="${n.id}" onclick="navigate('${n.id}')">
-    <span class="ic">${n.ic}</span><span>${n.label}</span><span class="badge" data-badge="${n.id}"></span></a>`).join("");
-  $("#bottomnav").innerHTML=NAV.filter(n=>n.m).map(n=>`<a data-bnav="${n.id}" onclick="navigate('${n.id}')">
-    <span class="bic">${n.ic}</span><span>${n.label}</span></a>`).join("");
+/* ============ NAV ============ */
+const TABS=[
+  {id:"dashboard",ic:"📊",label:"Dashboard"},
+  {id:"leads",ic:"🎯",label:"Leads"},
+  {id:"email",ic:"✉️",label:"Email"},
+  {id:"dm",ic:"📷",label:"IG DM"},
+  {id:"settings",ic:"⚙️",label:"Settings"},
+];
+function navigate(v){state.view=v;renderNav();render();window.scrollTo(0,0);}
+function renderNav(){
+  $("#nav").innerHTML=TABS.map(t=>`<button class="${state.view===t.id?'on':''}" onclick="navigate('${t.id}')">
+    <span class="ic">${t.ic}</span>${t.label}</button>`).join("");
 }
-function renderNavBadges(){
-  const set=(id,v)=>{const el=document.querySelector(`[data-badge="${id}"]`);if(el)el.textContent=v||"";};
-  set("contacts",state.data.contacts.length);
-  set("companies",state.data.companies.length);
-  set("deals",state.data.deals.filter(d=>d.stage!=="Won"&&d.stage!=="Lost").length);
-  const openTasks=state.data.tasks.filter(t=>!t.done).length;
-  set("tasks",openTasks);
-  const dueFollow=state.data.tasks.filter(t=>!t.done&&t.type==="follow-up"&&t.due_date&&t.due_date<=todayStr()).length;
-  set("outreach",dueFollow||"");
-  const activeCampaigns=state.data.campaigns.filter(c=>c.status==="sending"||c.status==="queued").length;
-  set("campaigns",activeCampaigns||"");
-}
-function navigate(view){
-  state.view=view;
-  document.querySelectorAll("[data-nav]").forEach(a=>a.classList.toggle("active",a.dataset.nav===view));
-  document.querySelectorAll("[data-bnav]").forEach(a=>a.classList.toggle("active",a.dataset.bnav===view));
-  const t=NAV.find(n=>n.id===view);$("#page-title").textContent=t?t.label:"";
-  $("#global-search-wrap").style.display=(view==="contacts"||view==="companies")?"block":"none";
-  toggleNav(false);
-  render();
-}
-function toggleNav(open){
-  $("#sidebar").classList.toggle("open",open);
-  $("#scrim").classList.toggle("show",open);
-}
-function quickNew(){
-  const v=state.view;
-  if(v==="companies")editCompany();
-  else if(v==="deals")editDeal();
-  else if(v==="tasks")editTask();
-  else if(v==="campaigns")newCampaign();
-  else if(v==="daily")openDailyQueue();
-  else editContact();
-}
-const onGlobalSearch=debounce(v=>{
-  if(state.view==="contacts"){state.ui.contactSearch=v;render();}
-  else if(state.view==="companies"){state.ui.companySearch=v;render();}
-},180);
-
-/* ============================================================
-   RENDER ROUTER
-============================================================ */
 function render(){
   const v=$("#view");
-  ({dashboard:renderDashboard,pipeline:renderPipeline,contacts:renderContacts,companies:renderCompanies,
-    deals:renderDeals,tasks:renderTasks,outreach:renderOutreach,campaigns:renderCampaigns,daily:renderDaily,settings:renderSettings}[state.view]||renderDashboard)(v);
+  if(state.view==="dashboard")v.innerHTML=viewDashboard();
+  else if(state.view==="leads")v.innerHTML=viewLeads();
+  else if(state.view==="email")v.innerHTML=viewEmail();
+  else if(state.view==="dm")v.innerHTML=viewDM();
+  else if(state.view==="settings")v.innerHTML=viewSettings();
 }
 
-/* ============================================================
-   DASHBOARD
-============================================================ */
-function computeAnalytics(){
-  const C=state.data.contacts, D=state.data.deals, T=state.data.tasks, A=state.data.activities, E=state.data.emailEvents;
-  const weekAgo=Date.now()-7*86400*1000;
-  // per-lead outreach picture
-  let contacted=0,replied=0,newWeek=0;
-  C.forEach(c=>{
-    const s=leadStats(c);
-    if(s.contacted)contacted++;
-    if(s.hasReply)replied++;
-    if(c.created_at&&new Date(c.created_at).getTime()>weekAgo)newWeek++;
+/* ============ SEGMENT LOGIC ============ */
+function segFilter(list){
+  const s=state.segment;
+  return list.filter(c=>{
+    if(s.type && c.business_type!==s.type)return false;
+    if(s.state && (c.state||"").toUpperCase()!==s.state.toUpperCase())return false;
+    if(s.hasEmail && !(c.email&&c.email.includes("@")))return false;
+    if(s.warm && !isInbound(c))return false;
+    return true;
   });
-  const outAll=A.filter(a=>isOutreachAct(a)&&a.direction!=="inbound");
-  const emailsFromActs=outAll.filter(a=>actChannel(a)==="email").length;
-  const emailsFromEvents=E.filter(e=>e.status==="sent").length;
-  const emailsSent=emailsFromActs+emailsFromEvents;
-  const dmsSent=outAll.filter(a=>actChannel(a)==="instagram_dm").length;
-  const respRate=contacted?Math.round(replied/contacted*100):0;
-  const openDeals=D.filter(d=>d.stage!=="Won"&&d.stage!=="Lost");
-  const pipelineVal=openDeals.reduce((s,d)=>s+Number(d.value||0),0);
-  const wonDeals=D.filter(d=>d.stage==="Won");
-  const wonVal=wonDeals.reduce((s,d)=>s+Number(d.value||0),0);
-  const wonLeads=C.filter(c=>c.status==="Won").length;
-  const convRate=C.length?Math.round(wonLeads/C.length*100):0;
-  const followDueToday=T.filter(t=>!t.done&&t.type==="follow-up"&&t.due_date===todayStr()).length;
-  const followOverdue=T.filter(t=>!t.done&&t.type==="follow-up"&&isOverdue(t.due_date)).length;
-  const dueToday=T.filter(t=>!t.done&&t.due_date===todayStr()).length;
-  const overdue=T.filter(t=>!t.done&&isOverdue(t.due_date)).length;
-  const emailable=C.filter(c=>c.email&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid").length;
-  const unsub=C.filter(c=>c.unsubscribed).length;
-  return {C,D,T,A,contacted,replied,newWeek,emailsSent,dmsSent,respRate,openDeals,pipelineVal,wonDeals,wonVal,wonLeads,
-    convRate,followDueToday,followOverdue,dueToday,overdue,emailable,unsub};
 }
-function activitySpark(days){
-  // outreach volume per day for the last N days (activities + email_events sent)
-  const buckets=[];const now=new Date();now.setHours(0,0,0,0);
-  for(let i=days-1;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);buckets.push({d,n:0});}
-  const idxFor=ts=>{const t=new Date(ts);t.setHours(0,0,0,0);const diff=Math.round((now-t)/86400000);const i=days-1-diff;return (i>=0&&i<days)?i:-1;};
-  state.data.activities.forEach(a=>{if(isOutreachAct(a)&&a.direction!=="inbound"){const i=idxFor(a.occurred_at);if(i>=0)buckets[i].n++;}});
-  state.data.emailEvents.forEach(e=>{if(e.status==="sent"&&e.sent_at){const i=idxFor(e.sent_at);if(i>=0)buckets[i].n++;}});
-  const max=Math.max(1,...buckets.map(b=>b.n));
-  const bars=buckets.map(b=>`<div class="sb ${b.n?"":"zero"}" style="height:${Math.round(b.n/max*100)}%" title="${b.d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}: ${b.n}"></div>`).join("");
-  const labels=buckets.map((b,i)=>(i%Math.ceil(days/7)===0)?`<span>${b.d.toLocaleDateString('en-US',{day:'numeric'})}</span>`:`<span></span>`).join("");
-  const total=buckets.reduce((s,b)=>s+b.n,0);
-  return {html:`<div class="spark">${bars}</div><div class="spark-x">${labels}</div>`,total};
+function emailable(list){return list.filter(c=>c.email&&c.email.includes("@")&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");}
+function withIG(list){return list.filter(c=>c.instagram && igHandle(c.instagram));}
+function segLabel(){
+  const s=state.segment;const p=[];
+  p.push(s.type||"All types"); if(s.state)p.push(s.state.toUpperCase()); if(s.hasEmail)p.push("has email");
+  return p.join(" · ");
 }
-function funnel(){
-  const C=state.data.contacts;
-  const rows=LEAD_STAGES.map(s=>({label:s,value:C.filter(c=>c.status===s).length,color:STATUS_COLORS[s]}));
-  const max=Math.max(1,...rows.map(r=>r.value));
-  return `<div class="funnel">${rows.map(r=>`<div class="fn-row">
-    <div class="fn-lbl">${r.label}</div>
-    <div class="fn-bar" style="width:${Math.max(8,r.value/max*100)}%;background:${r.color}">${r.value||""}</div>
-    <div class="fn-n">${r.value}</div></div>`).join("")}</div>`;
-}
-function renderDashboard(v){
-  const m=computeAnalytics();
-  const sp=activitySpark(14);
-  const stageCounts=DEAL_STAGES.map(s=>({label:s,value:m.D.filter(d=>d.stage===s).length,color:STAGE_COLORS[s],
-     sum:m.D.filter(d=>d.stage===s).reduce((a,d)=>a+Number(d.value||0),0)}));
-  const followTxt=m.followOverdue?`<span style="color:var(--red)">${m.followOverdue} overdue</span>`:(m.followDueToday?"due today":"all clear");
-  v.innerHTML=`
-  <div class="grid cards" style="margin-bottom:14px">
-    ${stat("Total leads",m.C.length,"◔",m.newWeek+" new this week")}
-    ${stat("Contacted",m.contacted,"✉",m.C.length?Math.round(m.contacted/m.C.length*100)+"% of leads":"—")}
-    ${stat("Replied",m.replied,"↩",m.respRate+"% response rate")}
-    ${stat("Follow-ups due",m.followDueToday+m.followOverdue,"⏰",followTxt)}
+function statesList(){return [...new Set(state.contacts.map(c=>(c.state||"").toUpperCase()).filter(Boolean))].sort();}
+
+/* ============ DASHBOARD ============ */
+function viewDashboard(){
+  const m=state.metrics;
+  const total=state.contacts.length;
+  const byType={};BIZ_TYPES.forEach(t=>byType[t]=0);
+  let emCount=0;
+  state.contacts.forEach(c=>{const t=c.business_type||"Other";byType[t]=(byType[t]||0)+1;if(c.email&&c.email.includes("@"))emCount++;});
+  const maxT=Math.max(1,...Object.values(byType));
+  const brk=BIZ_TYPES.filter(t=>byType[t]>0).map(t=>`
+    <div class="brk"><div class="nm">${esc(t)}</div>
+      <div class="bw"><div class="bar"><i style="width:${Math.round(byType[t]/maxT*100)}%"></i></div></div>
+      <div class="ct">${byType[t]}</div></div>`).join("")||`<div class="mut">No leads yet — import on the Leads tab.</div>`;
+  return `
+  <div class="h1">Dashboard</div>
+  <div class="sub">Your outreach at a glance</div>
+  <div class="metrics">
+    <div class="metric ig"><div class="n">${num(m.dms)}</div><div class="l">IG DMs sent</div>${m.inbound?`<div style="font-size:11px;color:var(--good);font-weight:800;margin-top:5px">+${num(m.inbound)} inbound</div>`:""}</div>
+    <div class="metric em"><div class="n">${num(m.emails)}</div><div class="l">Emails sent</div></div>
+    <div class="metric rp"><div class="n">${num(m.responses)}</div><div class="l">Responses</div></div>
   </div>
-  <div class="grid cards" style="margin-bottom:16px">
-    ${stat("Emails sent",m.emailsSent,"✉","all-time")}
-    ${stat("IG DMs sent",m.dmsSent,"📷","all-time")}
-    ${stat("Open pipeline",fmtMoney(m.pipelineVal),"⛁",m.openDeals.length+" active deals")}
-    ${stat("Conversions",m.wonLeads,"★",m.convRate+"% · "+fmtMoney(m.wonVal)+" won")}
-  </div>
-  <div class="dashgrid">
-    <div class="panel">
-      <h3>Outreach activity <span class="sub">· last 14 days · ${sp.total} touches</span></h3>
-      ${sp.html}
-    </div>
-    <div class="panel">
-      <h3>Lead pipeline <span class="sub">· ${m.C.length} leads</span></h3>
-      ${funnel()}
-    </div>
-  </div>
-  <div class="dashgrid" style="margin-top:14px">
-    <div class="panel">
-      <h3>Deals by stage <span class="sub">· value</span></h3>
-      ${barChart(stageCounts,true)}
-    </div>
-    <div class="panel">
-      <h3>Follow-ups due <span class="sub">· ${m.followDueToday+m.followOverdue}</span>
-        <button class="btn sm" style="margin-left:auto" onclick="state.ui.outreachTab='followups';navigate('outreach')">Work them →</button></h3>
-      ${renderTaskMini(m.T.filter(t=>!t.done&&t.type==="follow-up"&&t.due_date&&t.due_date<=todayStr()).slice(0,6),true)}
-    </div>
-  </div>
-  <div class="dashgrid" style="margin-top:14px">
-    <div class="panel">
-      <h3>Recent activity</h3>
-      ${m.A.length?`<ul class="timeline">${m.A.slice(0,8).map(a=>activityItem(a)).join("")}</ul>`:emptyBox("No activity yet","Log an outreach or add a note to a lead.")}
-    </div>
-    <div class="panel">
-      <h3>Email health</h3>
-      <div class="grid cards" style="grid-template-columns:1fr 1fr">
-        ${stat("Emailable",m.emailable,"✓","valid, not unsubscribed")}
-        ${stat("Unsubscribed",m.unsub,"⊘","suppressed")}
+  ${m.inbound?`<div class="card" style="margin-top:14px;border-color:var(--good)">
+    <div class="row" style="align-items:center">
+      <div><div style="font-weight:800">🔥 ${num(m.inbound)} warm inbound lead${m.inbound===1?"":"s"}</div>
+        <div class="mut" style="font-size:12.5px">From Instagram keyword replies (ManyChat) — higher priority than cold.</div></div>
+      <div style="flex:none"><button class="btn good" onclick="viewWarm()">View →</button></div>
+    </div></div>`:""}
+  <div class="card" style="margin-top:14px">
+    <div class="row" style="align-items:center">
+      <div><div class="big" style="color:var(--txt)">${num(total)}</div><div class="mut" style="font-weight:700">Total leads &nbsp;·&nbsp; ${num(emCount)} emailable</div></div>
+      <div style="flex:none">
+        <button class="btn" onclick="navigate('leads')">Build segment →</button>
       </div>
-      <p class="muted" style="font-size:12px;margin:12px 0 0">${m.C.length-m.emailable-m.unsub} leads have no valid email — enrich them from Leads or Campaigns.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:10px">Leads by business type</div>
+    ${brk}
+  </div>
+  <div class="card">
+    <div class="row" style="align-items:center">
+      <div><div style="font-weight:800">Responses received</div><div class="mut" style="font-size:12.5px">Check replies in the ceasai.pro Gmail inbox, then log the count here.</div></div>
+      <div class="stepper" style="flex:none">
+        <button class="btn" onclick="bumpResponses(-1)">–</button>
+        <div class="big" style="min-width:56px;text-align:center;color:var(--good)">${num(m.responses)}</div>
+        <button class="btn" onclick="bumpResponses(1)">+</button>
+      </div>
     </div>
   </div>`;
 }
-function stat(k,v,ic,d){return `<div class="stat"><div class="k"><span>${ic}</span>${k}</div><div class="v">${v}</div><div class="d">${d||""}</div></div>`;}
-function emptyBox(t,s){return `<div class="empty"><div class="big">◍</div><div style="font-weight:600;color:var(--text)">${esc(t)}</div><div>${esc(s||"")}</div></div>`;}
-function barChart(rows,showSum){
-  const max=Math.max(1,...rows.map(r=>r.value));
-  return rows.map(r=>`<div class="bar-row">
-    <div class="bl">${r.label}</div>
-    <div class="bar-track"><div class="bar-fill" style="width:${r.value/max*100}%;background:${r.color}"></div></div>
-    <div class="bn">${r.value}</div>
-    ${showSum?`<div class="bn" style="width:64px;color:var(--gold2)">${fmtMoney(r.sum)}</div>`:""}
-  </div>`).join("");
-}
-function donut(rows){
-  const total=rows.reduce((s,r)=>s+r.value,0);
-  if(!total)return emptyBox("No contacts yet","Add your first contact to see the breakdown.");
-  let acc=0;const R=52,C2=2*Math.PI*R;
-  const segs=rows.filter(r=>r.value).map(r=>{
-    const frac=r.value/total;const dash=frac*C2;const off=acc*C2;acc+=frac;
-    return `<circle r="${R}" cx="70" cy="70" fill="none" stroke="${r.color}" stroke-width="18"
-      stroke-dasharray="${dash} ${C2-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"/>`;
-  }).join("");
-  return `<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
-    <svg width="140" height="140" viewBox="0 0 140 140">${segs}
-      <text x="70" y="66" text-anchor="middle" fill="#e8eaf0" font-size="24" font-weight="800">${total}</text>
-      <text x="70" y="84" text-anchor="middle" fill="#9aa2b1" font-size="10">leads</text></svg>
-    <div style="flex:1;min-width:130px">${rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px">
-      <span style="width:10px;height:10px;border-radius:3px;background:${r.color}"></span>
-      <span style="flex:1">${r.label}</span><b>${r.value}</b></div>`).join("")}</div></div>`;
-}
-function activityItem(a){
-  const c=byId(state.data.contacts,a.contact_id);
-  const icon={email:"✉",call:"☎",text:"💬",meeting:"👥",note:"✎",stage_change:"⇄",dm:"📷",instagram_dm:"📷"}[a.type]||"•";
-  return `<li><span class="tdot"></span>
-    <div class="th">${icon} ${esc(a.subject||a.type)}${c?` · <a onclick="openContact('${c.id}')">${esc(contactName(c))}</a>`:""}</div>
-    <div class="tm">${relTime(a.occurred_at)}${a.direction?" · "+a.direction:""}</div>
-    ${a.body?`<div class="tb">${esc(a.body)}</div>`:""}</li>`;
-}
-function renderTaskMini(tasks,followupMode){
-  if(!tasks.length)return emptyBox(followupMode?"No follow-ups due":"All caught up",followupMode?"You're all caught up on follow-ups.":"No open tasks. Nice work.");
-  return tasks.map(t=>{const c=byId(state.data.contacts,t.contact_id);
-    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-    <input type="checkbox" style="width:16px;flex:none" onclick="toggleTask('${t.id}',true)"/>
-    <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(t.title)}</div>
-      <div class="cell-sub">${t.type}${t.due_date?` · <span style="color:${isOverdue(t.due_date)?'var(--red)':'var(--muted)'}">${fmtDate(t.due_date)}</span>`:""}</div></div>
-    ${followupMode&&c?`<button class="btn primary sm" onclick="sendFollowup('${c.id}','${t.id}')">Send</button>`:""}
-    </div>`;}).join("");
+function viewWarm(){state.segment={type:"",state:"",hasEmail:false,warm:true};navigate("leads");}
+async function bumpResponses(d){
+  const cur=(state.org&&state.org.responses_count)||0;
+  const next=Math.max(0,cur+d);
+  const {error}=await sb.from("orgs").update({responses_count:next}).eq("id",state.org.id);
+  if(error){toastErr(error);return;}
+  state.org.responses_count=next;state.metrics.responses=next;render();
 }
 
-/* ============================================================
-   PIPELINE (lead kanban, tap-to-advance)
-============================================================ */
-function nextStage(s){const i=LEAD_STAGES.indexOf(s);return (i>=0&&i<LEAD_STAGES.length-1&&s!=="Won"&&s!=="Lost")?LEAD_STAGES[i+1]:null;}
-function renderPipeline(v){
-  const C=state.data.contacts;
-  const toolbar=`<div class="toolbar">
-    <span class="muted" style="font-size:12.5px">${C.length} leads · tap a card to open, ▸ to advance stage</span>
-    <div class="spacer"></div><button class="btn primary" onclick="editContact()">+ Lead</button></div>`;
-  v.innerHTML=toolbar+`<div class="kanban" id="lead-kanban">${LEAD_STAGES.map(stage=>{
-    const items=C.filter(c=>c.status===stage);
-    return `<div class="kcol" data-lstage="${stage}" ondragover="lDragOver(event,this)" ondragleave="this.classList.remove('drag-over')" ondrop="lDrop(event,'${stage}',this)">
-      <div class="kcol-h"><span class="dot" style="background:${STATUS_COLORS[stage]||'#888'}"></span><span class="t">${stage}</span><span class="c">${items.length}</span></div>
-      <div class="kbody">${items.map(c=>{
-        const s=leadStats(c);const nx=nextStage(stage);
-        const em=emailDot(c);
-        return `<div class="kcard" draggable="true" data-id="${c.id}" ondragstart="lDragStart(event,'${c.id}')" ondragend="this.classList.remove('dragging')" onclick="openContact('${c.id}')">
-          <div class="kt">${em}${esc(contactName(c))}</div>
-          <div class="kmeta"><span>${esc(companyName(c.company_id)||c.title||'—')}</span><span>${s.last?relTime(s.last.occurred_at):'<span class="muted">new</span>'}</span></div>
-          ${nx?`<button class="advbtn" onclick="event.stopPropagation();advanceLeadStage('${c.id}','${nx}')">Advance to ${nx} ▸</button>`:''}
-        </div>`;}).join("")||`<div class="muted" style="font-size:11.5px;text-align:center;padding:12px 0">—</div>`}</div>
-    </div>`;}).join("")}</div>`;
-}
-function emailDot(c){
-  if(c.unsubscribed)return `<span class="emaildot ed-unsub" title="Unsubscribed"></span>`;
-  if(c.email&&(c.email_status==="bounced"||c.email_status==="invalid"))return `<span class="emaildot ed-bad" title="Bad email"></span>`;
-  if(c.email)return `<span class="emaildot ed-ok" title="Emailable"></span>`;
-  return `<span class="emaildot ed-no" title="No email"></span>`;
-}
-let dragLeadId=null;
-function lDragStart(e,id){dragLeadId=id;e.dataTransfer.effectAllowed="move";e.target.classList.add("dragging");}
-function lDragOver(e,el){e.preventDefault();el.classList.add("drag-over");}
-async function lDrop(e,stage,el){e.preventDefault();el.classList.remove("drag-over");const id=dragLeadId;if(!id)return;await advanceLeadStage(id,stage);dragLeadId=null;}
-async function advanceLeadStage(id,stage){
-  const c=byId(state.data.contacts,id);if(!c||c.status===stage)return;
-  const prev=c.status;c.status=stage;if(state.view==="pipeline")renderPipeline($("#view"));
-  try{
-    const {error}=await sb.from("contacts").update({status:stage,updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;
-    await sb.from("activities").insert(withOrg({contact_id:id,type:"stage_change",subject:`${contactName(c)} → ${stage}`,occurred_at:new Date().toISOString()}));
-    toast(`Moved to ${stage}`,"ok");await Promise.all([reload("contacts"),reload("activities")]);renderNavBadges();
-    if(state.view==="pipeline")renderPipeline($("#view"));
-    else if($("#modal-root").dataset.drawer==="1")renderContactDrawer(id);
-  }catch(err){c.status=prev;if(state.view==="pipeline")renderPipeline($("#view"));toastErr(err);}
-}
-
-/* ============================================================
-   CONTACTS
-============================================================ */
-function renderContacts(v){
-  let list=state.data.contacts.slice();
-  const q=state.ui.contactSearch.toLowerCase();
-  if(q)list=list.filter(c=>(contactName(c)+" "+(c.email||"")+" "+(c.phone||"")+" "+companyName(c.company_id)+" "+(c.tags||[]).join(" ")).toLowerCase().includes(q));
-  if(state.ui.contactStatus)list=list.filter(c=>c.status===state.ui.contactStatus);
-  const sk=state.ui.contactSort.k, dir=state.ui.contactSort.dir;
-  list.sort((a,b)=>{let x=sortVal(a,sk),y=sortVal(b,sk);return (x<y?-1:x>y?1:0)*dir;});
-
-  v.innerHTML=`
-  <div class="toolbar">
-    <select style="max-width:150px" onchange="state.ui.contactStatus=this.value;render()">
-      <option value="">All stages</option>
-      ${CONTACT_STATUSES.map(s=>`<option ${state.ui.contactStatus===s?"selected":""}>${s}</option>`).join("")}
-    </select>
-    <span class="muted" style="font-size:12.5px">${list.length} of ${state.data.contacts.length}</span>
-    <div class="spacer"></div>
-    <button class="btn" onclick="importCSV()">⇪ Import</button>
-    <button class="btn" onclick="exportCSV()">⇩ Export</button>
-    <button class="btn primary" onclick="editContact()">+ Lead</button>
-  </div>
-  ${list.length?`<div class="table-wrap"><table class="cardify">
-    <thead><tr>
-      ${th("Name","last_name")}${th("Company","company_id")}${th("Email","email")}
-      ${th("Stage","status")}<th>Tags</th>${th("Updated","updated_at")}<th class="right">Do</th>
-    </tr></thead><tbody>
-    ${list.map(c=>`<tr onclick="openContact('${c.id}')">
-      <td data-label="Name"><div class="cell-main">${esc(contactName(c))}</div><div class="cell-sub">${esc(c.title||"")}</div></td>
-      <td data-label="Company">${esc(companyName(c.company_id))||'<span class="muted">—</span>'}</td>
-      <td data-label="Email">${c.email?emailDot(c)+esc(c.email):'<span class="muted">'+emailDot(c)+'no email</span>'}<div class="cell-sub">${esc(c.phone||"")}</div></td>
-      <td data-label="Stage"><span class="st st-${c.status}">${c.status}</span></td>
-      <td data-label="Tags">${(c.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")||'<span class="muted">—</span>'}</td>
-      <td data-label="Updated" class="cell-sub">${relTime(c.updated_at)}</td>
-      <td data-label="" class="right"><button class="btn ghost sm" title="Generate outreach" onclick="event.stopPropagation();openEmailGen('${c.id}')">✨</button></td>
-    </tr>`).join("")}
-    </tbody></table></div>`:emptyBox("No leads found",q||state.ui.contactStatus?"Try clearing filters.":"Add your first lead to get started.")}`;
-}
-function sortVal(o,k){if(k==="company_id")return companyName(o.company_id).toLowerCase();if(k==="last_name")return contactName(o).toLowerCase();const val=o[k];return typeof val==="string"?val.toLowerCase():(val||"");}
-function th(label,k){const s=state.ui.contactSort;const ar=s.k===k?(s.dir>0?" ▲":" ▼"):"";return `<th onclick="setSort('${k}')">${label}${ar}</th>`;}
-function setSort(k){const s=state.ui.contactSort;if(s.k===k)s.dir*=-1;else{s.k=k;s.dir=1;}render();}
-
-function editContact(id){
-  const c=id?byId(state.data.contacts,id):{status:"New",tags:[]};
-  const compOpts=`<option value="">— none —</option>`+state.data.companies.map(co=>`<option value="${co.id}" ${c.company_id===co.id?"selected":""}>${esc(co.name)}</option>`).join("");
-  openModal(id?"Edit contact":"New contact",`
-    <div class="row"><div class="field"><label>First name</label><input id="f-first" value="${esc(c.first_name||"")}"/></div>
-      <div class="field"><label>Last name</label><input id="f-last" value="${esc(c.last_name||"")}"/></div></div>
-    <div class="row"><div class="field"><label>Email</label><input id="f-email" type="email" value="${esc(c.email||"")}"/></div>
-      <div class="field"><label>Phone</label><input id="f-phone" value="${esc(c.phone||"")}"/></div></div>
-    <div class="row"><div class="field"><label>Company</label><select id="f-company">${compOpts}</select></div>
-      <div class="field"><label>Title</label><input id="f-title" value="${esc(c.title||"")}"/></div></div>
-    <div class="row"><div class="field"><label>Status</label><select id="f-status">${CONTACT_STATUSES.map(s=>`<option ${c.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
-      <div class="field"><label>Source</label><select id="f-source"><option value="">— none —</option>${SOURCES.map(s=>`<option ${c.source===s?"selected":""}>${s}</option>`).join("")}${c.source&&!SOURCES.includes(c.source)?`<option selected>${esc(c.source)}</option>`:""}</select></div></div>
-    <div class="row"><div class="field"><label>Instagram handle</label><input id="f-instagram" value="${esc(c.instagram||"")}" placeholder="@handle"/></div>
-      <div class="field"><label>Tags (comma separated)</label><input id="f-tags" value="${esc((c.tags||[]).join(", "))}"/></div></div>
-    <div class="field"><label>Notes</label><textarea id="f-notes">${esc(c.notes||"")}</textarea></div>
-  `,[
-    id?{label:"Delete",cls:"danger",act:()=>delContact(id)}:null,
-    {label:"Cancel",cls:"ghost",act:closeModal},
-    {label:id?"Save":"Create",cls:"primary",act:()=>saveContact(id)}
-  ]);
-}
-async function saveContact(id){
-  const payload={
-    first_name:$("#f-first").value.trim(), last_name:$("#f-last").value.trim(),
-    email:$("#f-email").value.trim()||null, phone:$("#f-phone").value.trim()||null,
-    company_id:$("#f-company").value||null, title:$("#f-title").value.trim()||null,
-    status:$("#f-status").value, source:$("#f-source").value.trim()||null,
-    instagram:$("#f-instagram").value.trim()||null,
-    tags:$("#f-tags").value.split(",").map(s=>s.trim()).filter(Boolean),
-    notes:$("#f-notes").value.trim()||null, updated_at:new Date().toISOString()
-  };
-  if(!payload.first_name&&!payload.last_name&&!payload.email){toast("Add a name or email","err");return;}
-  try{
-    if(id){const {error}=await sb.from("contacts").update(payload).eq("id",id);if(error)throw error;toast("Contact updated","ok");}
-    else{const {error}=await sb.from("contacts").insert(withOrg(payload));if(error)throw error;toast("Contact added","ok");}
-    closeModal();await reload("contacts");render();
-  }catch(e){toastErr(e);}
-}
-async function delContact(id){
-  if(!confirm("Delete this contact? This cannot be undone."))return;
-  const {error}=await sb.from("contacts").delete().eq("id",id);
-  if(error)return toastErr(error);
-  toast("Contact deleted","ok");closeModal();closeDrawer();await Promise.all([reload("contacts"),reload("activities")]);render();
-}
-
-/* ----- Contact detail drawer ----- */
-let drawerContactSub="timeline";
-function openContact(id){drawerContactSub="timeline";renderContactDrawer(id);}
-function renderContactDrawer(id){
-  const c=byId(state.data.contacts,id);if(!c)return;
-  const acts=state.data.activities.filter(a=>a.contact_id===id);
-  const tasks=state.data.tasks.filter(t=>t.contact_id===id);
-  const deals=state.data.deals.filter(d=>d.contact_id===id);
-  const emails=state.data.emailEvents.filter(e=>e.contact_id===id);
-  const emailLine=c.unsubscribed?`<span class="pill" style="color:var(--amber)">⊘ Unsubscribed</span>`
-    :(c.email?`${emailDot(c)}<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>${c.email_confidence!=null?` <span class="muted">· ${c.email_confidence}% conf.</span>`:""}${c.email_source?` <span class="muted">· ${esc(c.email_source)}</span>`:""}`
-      :`<span class="muted">no email</span> <a onclick="enrichLeads(['${id}'])" style="cursor:pointer">🔎 find with Hunter</a>`);
-  const body=`
-    <div style="display:flex;gap:13px;align-items:center;margin-bottom:14px">
-      <div class="avatar" style="width:46px;height:46px;font-size:16px">${initials(contactName(c))}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:17px;font-weight:800">${esc(contactName(c))}</div>
-        <div class="muted" style="font-size:12.5px">${esc(c.title||"")}${c.title&&c.company_id?" · ":""}${esc(companyName(c.company_id))}</div>
-      </div>
-      <span class="st st-${c.status}">${c.status}</span>
-    </div>
-    <div class="panel" style="padding:9px 11px;margin-bottom:10px"><div style="font-size:10.5px;color:var(--muted);font-weight:600">Email</div>
-      <div style="font-size:13px;margin-top:3px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${emailLine}
-        <button class="btn ghost sm" style="margin-left:auto" onclick="editContactEmail('${id}')">Edit</button></div></div>
-    <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-      ${info("Phone",c.phone?esc(c.phone):"—")}
-      ${info("Instagram",c.instagram?`<a href="https://instagram.com/${esc(igHandle(c.instagram))}" target="_blank" rel="noopener">@${esc(igHandle(c.instagram))}</a>`:"—")}
-      ${info("Source",esc(c.source||"—"))}
-      ${info("Last emailed",c.last_emailed_at?relTime(c.last_emailed_at):"—")}
-    </div>
-    ${(c.tags||[]).length?`<div style="margin-bottom:12px">${c.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`:""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn sm primary" onclick="openEmailGen('${id}')">✨ Generate outreach</button>
-      <button class="btn sm" onclick="sendFollowup('${id}')">↩ Follow-up</button>
-      <button class="btn sm" onclick="markReplied('${id}')">✓ Mark replied</button>
-      <button class="btn sm" onclick="logOutreach('${id}')">✉ Log</button>
-      <button class="btn sm" onclick="addNote('${id}')">✎ Note</button>
-      <button class="btn sm" onclick="editTask(null,'${id}')">☑ Task</button>
-      <button class="btn sm" onclick="editContact('${id}')">Edit</button>
-    </div>
-    <div class="subtabs" style="margin-top:14px">
-      <button class="${drawerContactSub==="timeline"?"active":""}" onclick="drawerContactSub='timeline';renderContactDrawer('${id}')">Timeline (${acts.length})</button>
-      <button class="${drawerContactSub==="emails"?"active":""}" onclick="drawerContactSub='emails';renderContactDrawer('${id}')">Emails (${emails.length})</button>
-      <button class="${drawerContactSub==="deals"?"active":""}" onclick="drawerContactSub='deals';renderContactDrawer('${id}')">Deals (${deals.length})</button>
-      <button class="${drawerContactSub==="tasks"?"active":""}" onclick="drawerContactSub='tasks';renderContactDrawer('${id}')">Tasks (${tasks.length})</button>
-      ${c.notes?`<button class="${drawerContactSub==="notes"?"active":""}" onclick="drawerContactSub='notes';renderContactDrawer('${id}')">Notes</button>`:""}
-    </div>
-    ${drawerContactSub==="timeline"?(acts.length?`<ul class="timeline">${acts.map(activityItem).join("")}</ul>`:emptyBox("No activity yet","Log an outreach or add a note.")):""}
-    ${drawerContactSub==="emails"?(emails.length?emails.map(emailEventRow).join(""):emptyBox("No emails sent yet","Send via Follow-up or a Campaign.")):""}
-    ${drawerContactSub==="deals"?(deals.length?deals.map(dealMini).join(""):emptyBox("No deals","Create a deal for this contact.")):""}
-    ${drawerContactSub==="tasks"?(tasks.length?tasks.map(taskRowMini).join(""):emptyBox("No tasks","")):""}
-    ${drawerContactSub==="notes"?`<div class="tb" style="white-space:pre-wrap">${esc(c.notes||"")}</div>`:""}
-  `;
-  openDrawer(contactName(c),body);
-}
-function emailEventRow(e){
-  const col={sent:"var(--green)",queued:"var(--amber)",failed:"var(--red)",bounced:"var(--red)",opened:"var(--blue)",replied:"var(--gold2)"}[e.status]||"var(--muted)";
-  return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:12.5px">${esc(e.subject||"(no subject)")}</b>
-      <span class="pill" style="color:${col}">${e.status}</span></div>
-    <div class="cell-sub">${esc(e.to_email||"")} · ${fmtDateTime(e.sent_at||e.created_at)}${e.error?` · <span style="color:var(--red)">${esc(e.error)}</span>`:""}</div></div>`;
-}
-function editContactEmail(id){
-  const c=byId(state.data.contacts,id);if(!c)return;
-  openModal("Email — "+contactName(c),`
-    <div class="field"><label>Email address</label><input id="ce-email" type="email" value="${esc(c.email||"")}" placeholder="name@company.com"/></div>
+/* ============ LEADS / SEGMENTS ============ */
+function viewLeads(){
+  const imported=state.contacts.some(c=>c.source==="mindbody");
+  const seg=segFilter(state.contacts);
+  const em=emailable(seg);const ig=withIG(seg);
+  const typeChips=["",...BIZ_TYPES].map(t=>`<span class="chip ${state.segment.type===t?'on':''}" onclick="setSeg('type','${esc(t).replace(/'/g,"\\'")}')">${t?esc(t):"All types"}</span>`).join(" ");
+  const stateOpts=`<option value="">All states</option>`+statesList().map(s=>`<option value="${s}" ${state.segment.state===s?'selected':''}>${s}</option>`).join("");
+  const preview=seg.slice(0,40).map(c=>leadCard(c)).join("")||`<div class="mut">No leads match this segment.</div>`;
+  return `
+  <div class="h1">Leads &amp; Segments</div>
+  <div class="sub">Pick a business type to build a target segment</div>
+  ${imported?"":`<div class="banner info">No leads imported yet. Tap below to load the 1,791 Mindbody businesses.</div>
+     <button class="btn primary block lg" style="margin-bottom:14px" onclick="importLeads(this)">⬇ Import Mindbody leads (1,791)</button>`}
+  <div class="card">
+    <label>Business type</label>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px">${typeChips}</div>
     <div class="row">
-      <div class="field"><label>Deliverability</label><select id="ce-status">
-        ${["","valid","invalid","bounced"].map(s=>`<option value="${s}" ${(c.email_status||"")===s?"selected":""}>${s||"unknown"}</option>`).join("")}</select></div>
-      <div class="field"><label>Unsubscribed (suppress)</label><select id="ce-unsub">
-        <option value="false" ${!c.unsubscribed?"selected":""}>No — emailable</option>
-        <option value="true" ${c.unsubscribed?"selected":""}>Yes — never email</option></select></div>
+      <div class="field" style="margin:0"><label>State</label><select onchange="setSeg('state',this.value)">${stateOpts}</select></div>
+      <div class="field" style="margin:0;max-width:150px"><label>&nbsp;</label>
+        <button class="btn ${state.segment.hasEmail?'primary':''} block" onclick="toggleSeg('hasEmail')">${state.segment.hasEmail?'✓ Has email':'Has email'}</button></div>
     </div>
-    <p class="muted" style="font-size:11.5px;margin:0">Unsubscribed leads are permanently skipped by every campaign and follow-up send.</p>
-  `,[{label:"Cancel",cls:"ghost",act:closeModal},{label:"Save",cls:"primary",act:async()=>{
-    const email=$("#ce-email").value.trim()||null;
-    const unsub=$("#ce-unsub").value==="true";
-    const payload={email,email_status:$("#ce-status").value||null,unsubscribed:unsub,
-      unsubscribed_at:unsub?(c.unsubscribed_at||new Date().toISOString()):null,
-      email_source:email&&email!==c.email?"manual":c.email_source||null,updated_at:new Date().toISOString()};
-    const {error}=await sb.from("contacts").update(payload).eq("id",id);
-    if(error)return toastErr(error);
-    toast("Email updated","ok");closeModal();await reload("contacts");renderContactDrawer(id);
-  }}]);
-}
-async function markReplied(id){
-  const c=byId(state.data.contacts,id);if(!c)return;
-  try{
-    await sb.from("activities").insert(withOrg({contact_id:id,type:"note",direction:"inbound",
-      subject:"Reply received",body:"Marked as replied.",occurred_at:new Date().toISOString()}));
-    const upd={last_reply_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-    if(c.status==="New"||c.status==="Contacted")upd.status="Replied";
-    await sb.from("contacts").update(upd).eq("id",id);
-    toast("Marked as replied ✓","ok");
-    await Promise.all([reload("activities"),reload("contacts")]);renderNavBadges();
-    if($("#modal-root").dataset.drawer==="1")renderContactDrawer(id);else render();
-  }catch(e){toastErr(e);}
-}
-function info(k,v){return `<div class="panel" style="padding:9px 11px"><div style="font-size:10.5px;color:var(--muted);font-weight:600">${k}</div><div style="font-size:13px;margin-top:2px">${v}</div></div>`;}
-function dealMini(d){return `<div class="panel" style="padding:10px 12px;margin-bottom:8px;cursor:pointer" onclick="editDeal('${d.id}')">
-  <div style="display:flex;justify-content:space-between"><b>${esc(d.title)}</b><span style="color:var(--gold2);font-weight:800">${fmtMoney(d.value)}</span></div>
-  <div class="cell-sub"><span class="st st-${d.stage}">${d.stage}</span> ${d.expected_close?" · close "+fmtDate(d.expected_close):""}</div></div>`;}
-function taskRowMini(t){return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-  <input type="checkbox" ${t.done?"checked":""} style="width:16px;flex:none" onclick="toggleTask('${t.id}')"/>
-  <div style="flex:1"><div style="font-weight:600;${t.done?"text-decoration:line-through;color:var(--muted)":""}">${esc(t.title)}</div>
-  <div class="cell-sub">${t.type}${t.due_date?" · "+fmtDate(t.due_date):""}</div></div></div>`;}
-
-/* ----- Outreach / notes on a contact ----- */
-function logOutreach(contactId){
-  const c=byId(state.data.contacts,contactId);
-  const tplOpts=`<option value="">— template —</option>`+state.data.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("");
-  openModal("Log outreach — "+contactName(c),`
+    <button class="btn ${state.segment.warm?'good':''} block" style="margin-top:10px" onclick="toggleSeg('warm')">${state.segment.warm?'✓ Warm inbound only':'🔥 Warm inbound only'}</button>
+  </div>
+  <div class="card">
+    <div class="row" style="align-items:center;margin-bottom:12px">
+      <div><div style="font-weight:900;font-size:26px">${num(seg.length)}</div><div class="mut" style="font-weight:700">in segment · ${num(em.length)} emailable · ${num(ig.length)} on IG</div></div>
+    </div>
     <div class="row">
-      <div class="field"><label>Channel</label><select id="o-channel">${CHANNELS.map(x=>`<option value="${x}">${CHANNEL_LABELS[x]||x}</option>`).join("")}</select></div>
-      <div class="field"><label>Direction</label><select id="o-dir"><option>outbound</option><option>inbound</option></select></div>
+      <button class="btn primary" onclick="navigate('email')">✉️ Email segment</button>
+      <button class="btn" style="background:linear-gradient(135deg,var(--accent2),#b06dff);border:none;color:#fff" onclick="navigate('dm')">📷 DM segment</button>
     </div>
-    <div class="field"><label>Use template</label><select id="o-tpl" onchange="applyTpl(this.value)">${tplOpts}</select></div>
-    <div class="field"><label>Subject</label><input id="o-subj" placeholder="Intro email, follow-up call…"/></div>
-    <div class="field"><label>Notes / message</label><textarea id="o-body"></textarea></div>
-    <div class="field"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--text)"><input type="checkbox" id="o-followup" style="width:auto"/> Create a follow-up task</label>
-      <input id="o-followup-date" type="date" value="${addDays(3)}" style="margin-top:8px"/></div>
-    <div class="field"><label>Move contact to status</label><select id="o-status">
-      <option value="">— keep (${c.status}) —</option>${CONTACT_STATUSES.map(s=>`<option>${s}</option>`).join("")}</select></div>
-  `,[{label:"Cancel",cls:"ghost",act:closeModal},{label:"Log",cls:"primary",act:()=>saveOutreach(contactId)}]);
-}
-function applyTpl(id){const t=byId(state.data.templates,id);if(!t)return;$("#o-subj").value=t.subject||"";$("#o-body").value=t.body||"";if(t.channel)$("#o-channel").value=t.channel;}
-function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
-async function saveOutreach(contactId){
-  const type=$("#o-channel").value;
-  try{
-    const {error}=await sb.from("activities").insert(withOrg({
-      contact_id:contactId,type,channel:type,direction:$("#o-dir").value,
-      subject:$("#o-subj").value.trim()||null,body:$("#o-body").value.trim()||null,occurred_at:new Date().toISOString()
-    }));if(error)throw error;
-    if($("#o-followup").checked){
-      await sb.from("tasks").insert(withOrg({title:"Follow up: "+contactName(byId(state.data.contacts,contactId)),
-        type:"follow-up",due_date:$("#o-followup-date").value||null,contact_id:contactId}));
-    }
-    const ns=$("#o-status").value;
-    if(ns){await sb.from("contacts").update({status:ns,updated_at:new Date().toISOString()}).eq("id",contactId);}
-    toast("Outreach logged","ok");closeModal();
-    await Promise.all([reload("activities"),reload("tasks"),reload("contacts")]);
-    if($("#modal-root").dataset.drawer)renderContactDrawer(contactId);render();
-  }catch(e){toastErr(e);}
-}
-function addNote(contactId){
-  openModal("Add note",`<div class="field"><label>Note</label><textarea id="n-body" autofocus></textarea></div>`,
-    [{label:"Cancel",cls:"ghost",act:closeModal},{label:"Save",cls:"primary",act:async()=>{
-      const body=$("#n-body").value.trim();if(!body)return;
-      const {error}=await sb.from("activities").insert(withOrg({contact_id:contactId,type:"note",body,occurred_at:new Date().toISOString()}));
-      if(error)return toastErr(error);
-      toast("Note added","ok");closeModal();await reload("activities");
-      if($("#modal-root").dataset.drawer)renderContactDrawer(contactId);render();
-    }}]);
-}
-
-/* ----- CSV ----- */
-function exportCSV(){
-  const cols=["first_name","last_name","email","phone","instagram","company","title","status","source","tags","notes"];
-  const rows=state.data.contacts.map(c=>[c.first_name,c.last_name,c.email,c.phone,c.instagram,companyName(c.company_id),c.title,c.status,c.source,(c.tags||[]).join("; "),c.notes]);
-  const csv=[cols.join(","),...rows.map(r=>r.map(csvCell).join(","))].join("\n");
-  const blob=new Blob([csv],{type:"text/csv"});const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);a.download="contacts-"+todayStr()+".csv";a.click();
-  toast("Exported "+rows.length+" contacts","ok");
-}
-function csvCell(v){v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-function importCSV(){
-  const inp=document.createElement("input");inp.type="file";inp.accept=".csv,text/csv";
-  inp.onchange=()=>{const f=inp.files[0];if(!f)return;const r=new FileReader();
-    r.onload=()=>previewImport(parseCSV(r.result));r.readAsText(f);};
-  inp.click();
-}
-function parseCSV(text){
-  const rows=[];let i=0,field="",row=[],inQ=false;
-  text=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
-  while(i<text.length){const ch=text[i];
-    if(inQ){if(ch==='"'){if(text[i+1]==='"'){field+='"';i++;}else inQ=false;}else field+=ch;}
-    else{if(ch==='"')inQ=true;else if(ch===",")row.push(field),field="";else if(ch==="\n"){row.push(field);rows.push(row);row=[];field="";}else field+=ch;}
-    i++;}
-  if(field.length||row.length){row.push(field);rows.push(row);}
-  return rows.filter(r=>r.some(c=>c.trim()!==""));
-}
-function previewImport(rows){
-  if(!rows.length)return toast("Empty file","err");
-  const header=rows[0].map(h=>h.trim().toLowerCase());
-  const idx=n=>header.findIndex(h=>h===n||h.replace(/[_\s]/g,"")===n.replace(/[_\s]/g,""));
-  const map={first:idx("first name")>=0?idx("first name"):idx("first_name"),
-    last:idx("last name")>=0?idx("last name"):idx("last_name"),
-    name:idx("name"),email:idx("email"),phone:idx("phone"),company:idx("company"),
-    title:idx("title"),status:idx("status"),source:idx("source"),tags:idx("tags"),notes:idx("notes"),instagram:idx("instagram")};
-  const body=rows.slice(1);
-  const parsed=body.map(r=>{
-    let fn=map.first>=0?r[map.first]:"",ln=map.last>=0?r[map.last]:"";
-    if((!fn&&!ln)&&map.name>=0){const p=(r[map.name]||"").trim().split(/\s+/);fn=p.shift()||"";ln=p.join(" ");}
-    return {first_name:(fn||"").trim(),last_name:(ln||"").trim(),
-      email:g(r,map.email),phone:g(r,map.phone),instagram:g(r,map.instagram),
-      title:g(r,map.title),status:CONTACT_STATUSES.includes((g(r,map.status)||"").trim())?g(r,map.status).trim():"New",
-      source:g(r,map.source)||"CSV import",
-      tags:(g(r,map.tags)||"").split(/[;,]/).map(s=>s.trim()).filter(Boolean),
-      notes:g(r,map.notes),_company:g(r,map.company)};
-  }).filter(c=>c.first_name||c.last_name||c.email);
-  openModal("Import contacts",`<p class="muted" style="margin-top:0">Found <b style="color:var(--text)">${parsed.length}</b> contacts to import. Preview:</p>
-    <div class="table-wrap" style="max-height:280px;overflow:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Status</th></tr></thead>
-    <tbody>${parsed.slice(0,50).map(c=>`<tr><td>${esc((c.first_name+" "+c.last_name).trim())}</td><td>${esc(c.email||"")}</td><td>${esc(c._company||"")}</td><td>${esc(c.status)}</td></tr>`).join("")}</tbody></table></div>`,
-    [{label:"Cancel",cls:"ghost",act:closeModal},{label:`Import ${parsed.length}`,cls:"primary",act:()=>runImport(parsed)}]);
-  function g(r,i){return i>=0?(r[i]||""):"";}
-}
-async function runImport(parsed){
-  try{
-    // ensure companies exist
-    const compMap={};state.data.companies.forEach(c=>compMap[c.name.toLowerCase()]=c.id);
-    const newComps=[...new Set(parsed.map(p=>p._company).filter(Boolean).filter(n=>!compMap[n.toLowerCase()]))];
-    if(newComps.length){
-      const {data,error}=await sb.from("companies").insert(newComps.map(n=>withOrg({name:n}))).select();
-      if(error)throw error;(data||[]).forEach(c=>compMap[c.name.toLowerCase()]=c.id);
-    }
-    const payload=parsed.map(p=>withOrg({first_name:p.first_name,last_name:p.last_name,email:p.email||null,
-      phone:p.phone||null,instagram:p.instagram||null,title:p.title||null,status:p.status,source:p.source||null,tags:p.tags,notes:p.notes||null,
-      company_id:p._company?compMap[p._company.toLowerCase()]:null,updated_at:new Date().toISOString()}));
-    const {error}=await sb.from("contacts").insert(payload);if(error)throw error;
-    toast("Imported "+payload.length+" contacts","ok");closeModal();
-    await Promise.all([reload("contacts"),reload("companies")]);render();
-  }catch(e){toastErr(e);}
-}
-
-/* ============================================================
-   COMPANIES
-============================================================ */
-function renderCompanies(v){
-  let list=state.data.companies.slice();
-  const q=state.ui.companySearch.toLowerCase();
-  if(q)list=list.filter(c=>(c.name+" "+(c.industry||"")+" "+(c.website||"")).toLowerCase().includes(q));
-  v.innerHTML=`<div class="toolbar"><span class="muted" style="font-size:12.5px">${list.length} companies</span>
-    <div class="spacer"></div><button class="btn primary" onclick="editCompany()">+ Company</button></div>
-    ${list.length?`<div class="grid cards">${list.map(c=>{
-      const n=state.data.contacts.filter(x=>x.company_id===c.id).length;
-      const dv=state.data.deals.filter(d=>d.company_id===c.id&&d.stage!=="Lost").reduce((s,d)=>s+Number(d.value||0),0);
-      return `<div class="panel" style="cursor:pointer" onclick="editCompany('${c.id}')">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div><div style="font-weight:700;font-size:15px">${esc(c.name)}</div>
-          <div class="cell-sub">${esc(c.industry||"")}${c.size?" · "+esc(c.size):""}</div></div>
-          <div class="avatar" style="border-radius:9px;background:var(--panel3);color:var(--gold2)">${initials(c.name)}</div>
-        </div>
-        ${c.website?`<div style="font-size:12px;margin-top:8px"><a href="${esc(fixUrl(c.website))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.website)}</a></div>`:""}
-        <div style="display:flex;gap:14px;margin-top:11px;font-size:12px" class="muted">
-          <span>👤 ${n} contact${n===1?"":"s"}</span><span>⛁ ${fmtMoney(dv)}</span></div>
-      </div>`;}).join("")}</div>`:emptyBox("No companies yet","Add a company or import contacts with company names.")}`;
-}
-function fixUrl(u){return /^https?:\/\//.test(u)?u:"https://"+u;}
-function editCompany(id){
-  const c=id?byId(state.data.companies,id):{};
-  const linked=id?state.data.contacts.filter(x=>x.company_id===id):[];
-  openModal(id?"Edit company":"New company",`
-    <div class="field"><label>Name</label><input id="c-name" value="${esc(c.name||"")}" autofocus/></div>
-    <div class="row"><div class="field"><label>Website</label><input id="c-web" value="${esc(c.website||"")}" placeholder="example.com"/></div>
-      <div class="field"><label>Industry</label><input id="c-ind" value="${esc(c.industry||"")}"/></div></div>
-    <div class="field"><label>Company size</label><select id="c-size">
-      ${["","1-10","11-50","51-200","201-500","500+"].map(s=>`<option ${c.size===s?"selected":""}>${s||"—"}</option>`).join("")}</select></div>
-    <div class="field"><label>Notes</label><textarea id="c-notes">${esc(c.notes||"")}</textarea></div>
-    ${linked.length?`<div class="field"><label>Linked contacts (${linked.length})</label>
-      <div>${linked.map(x=>`<span class="chip" style="margin:2px" onclick="closeModal();openContact('${x.id}')">${esc(contactName(x))}</span>`).join("")}</div></div>`:""}
-  `,[id?{label:"Delete",cls:"danger",act:()=>delCompany(id)}:null,
-     {label:"Cancel",cls:"ghost",act:closeModal},
-     {label:id?"Save":"Create",cls:"primary",act:()=>saveCompany(id)}]);
-}
-async function saveCompany(id){
-  const name=$("#c-name").value.trim();if(!name)return toast("Name required","err");
-  const payload={name,website:$("#c-web").value.trim()||null,industry:$("#c-ind").value.trim()||null,
-    size:($("#c-size").value==="—"?"":$("#c-size").value)||null,notes:$("#c-notes").value.trim()||null,updated_at:new Date().toISOString()};
-  try{
-    if(id){const {error}=await sb.from("companies").update(payload).eq("id",id);if(error)throw error;toast("Company updated","ok");}
-    else{const {error}=await sb.from("companies").insert(withOrg(payload));if(error)throw error;toast("Company added","ok");}
-    closeModal();await reload("companies");render();
-  }catch(e){toastErr(e);}
-}
-async function delCompany(id){
-  if(!confirm("Delete this company? Contacts and deals will be unlinked."))return;
-  const {error}=await sb.from("companies").delete().eq("id",id);if(error)return toastErr(error);
-  toast("Company deleted","ok");closeModal();await Promise.all([reload("companies"),reload("contacts"),reload("deals")]);render();
-}
-
-/* ============================================================
-   DEALS (Kanban)
-============================================================ */
-function renderDeals(v){
-  const D=state.data.deals;
-  const total=D.filter(d=>d.stage!=="Won"&&d.stage!=="Lost").reduce((s,d)=>s+Number(d.value||0),0);
-  v.innerHTML=`<div class="toolbar"><span class="muted" style="font-size:12.5px">${D.length} deals · <b style="color:var(--gold2)">${fmtMoney(total)}</b> open pipeline</span>
-    <div class="spacer"></div><button class="btn primary" onclick="editDeal()">+ Deal</button></div>
-    <div class="kanban" id="kanban">${DEAL_STAGES.map(stage=>{
-      const items=D.filter(d=>d.stage===stage);
-      const sum=items.reduce((s,d)=>s+Number(d.value||0),0);
-      return `<div class="kcol" data-stage="${stage}" ondragover="kDragOver(event,this)" ondragleave="this.classList.remove('drag-over')" ondrop="kDrop(event,'${stage}',this)">
-        <div class="kcol-h"><span class="dot" style="background:${STAGE_COLORS[stage]}"></span><span class="t">${stage}</span>
-          <span class="c">${items.length}</span></div>
-        <div style="padding:4px 13px 0" class="sum" ><span style="color:var(--gold2);font-size:11px;font-weight:700">${fmtMoney(sum)}</span></div>
-        <div class="kbody">${items.map(d=>{
-          const c=byId(state.data.contacts,d.contact_id);
-          return `<div class="kcard" draggable="true" data-id="${d.id}" ondragstart="kDragStart(event,'${d.id}')" ondragend="this.classList.remove('dragging')" onclick="editDeal('${d.id}')">
-            <div class="kt">${esc(d.title)}</div><div class="kv">${fmtMoney(d.value)}</div>
-            <div class="kmeta"><span>${c?esc(contactName(c)):esc(companyName(d.company_id))||"—"}</span>
-              <span>${d.expected_close?fmtDate(d.expected_close):""}</span></div>
-          </div>`;}).join("")||`<div class="muted" style="font-size:11.5px;text-align:center;padding:10px 0">Drop here</div>`}</div>
-      </div>`;}).join("")}</div>`;
-}
-let dragDealId=null;
-function kDragStart(e,id){dragDealId=id;e.dataTransfer.effectAllowed="move";e.target.classList.add("dragging");}
-function kDragOver(e,el){e.preventDefault();el.classList.add("drag-over");}
-async function kDrop(e,stage,el){
-  e.preventDefault();el.classList.remove("drag-over");
-  const id=dragDealId;if(!id)return;
-  const d=byId(state.data.deals,id);if(!d||d.stage===stage){return;}
-  const prev=d.stage;d.stage=stage;renderDeals($("#view")); // optimistic
-  try{
-    const {error}=await sb.from("deals").update({stage,updated_at:new Date().toISOString()}).eq("id",id);
-    if(error)throw error;
-    await sb.from("activities").insert(withOrg({contact_id:d.contact_id||null,deal_id:id,type:"stage_change",
-      subject:`Deal "${d.title}" → ${stage}`,occurred_at:new Date().toISOString()}));
-    toast(`Moved to ${stage}`,"ok");await reload("activities");renderNavBadges();
-  }catch(err){d.stage=prev;renderDeals($("#view"));toastErr(err);}
-  dragDealId=null;
-}
-function editDeal(id,contactId){
-  const d=id?byId(state.data.deals,id):{stage:"New",value:0,currency:"USD",contact_id:contactId||null};
-  const contactOpts=`<option value="">— none —</option>`+state.data.contacts.map(c=>`<option value="${c.id}" ${d.contact_id===c.id?"selected":""}>${esc(contactName(c))}</option>`).join("");
-  const compOpts=`<option value="">— none —</option>`+state.data.companies.map(c=>`<option value="${c.id}" ${d.company_id===c.id?"selected":""}>${esc(c.name)}</option>`).join("");
-  openModal(id?"Edit deal":"New deal",`
-    <div class="field"><label>Title</label><input id="d-title" value="${esc(d.title||"")}" autofocus placeholder="e.g. Acme — annual plan"/></div>
-    <div class="row"><div class="field"><label>Value (USD)</label><input id="d-value" type="number" min="0" step="100" value="${d.value||0}"/></div>
-      <div class="field"><label>Stage</label><select id="d-stage">${DEAL_STAGES.map(s=>`<option ${d.stage===s?"selected":""}>${s}</option>`).join("")}</select></div></div>
-    <div class="row"><div class="field"><label>Contact</label><select id="d-contact">${contactOpts}</select></div>
-      <div class="field"><label>Company</label><select id="d-company">${compOpts}</select></div></div>
-    <div class="field"><label>Expected close</label><input id="d-close" type="date" value="${d.expected_close||""}"/></div>
-    <div class="field"><label>Notes</label><textarea id="d-notes">${esc(d.notes||"")}</textarea></div>
-  `,[id?{label:"Delete",cls:"danger",act:()=>delDeal(id)}:null,
-     {label:"Cancel",cls:"ghost",act:closeModal},
-     {label:id?"Save":"Create",cls:"primary",act:()=>saveDeal(id)}]);
-}
-async function saveDeal(id){
-  const title=$("#d-title").value.trim();if(!title)return toast("Title required","err");
-  const payload={title,value:Number($("#d-value").value||0),stage:$("#d-stage").value,
-    contact_id:$("#d-contact").value||null,company_id:$("#d-company").value||null,
-    expected_close:$("#d-close").value||null,notes:$("#d-notes").value.trim()||null,updated_at:new Date().toISOString()};
-  try{
-    if(id){const {error}=await sb.from("deals").update(payload).eq("id",id);if(error)throw error;toast("Deal updated","ok");}
-    else{const {error}=await sb.from("deals").insert(withOrg(payload));if(error)throw error;toast("Deal created","ok");}
-    closeModal();await reload("deals");renderNavBadges();
-    if(state.view==="deals")render();else if($("#modal-root").dataset.drawer)renderContactDrawer(payload.contact_id);
-  }catch(e){toastErr(e);}
-}
-async function delDeal(id){
-  if(!confirm("Delete this deal?"))return;
-  const {error}=await sb.from("deals").delete().eq("id",id);if(error)return toastErr(error);
-  toast("Deal deleted","ok");closeModal();await reload("deals");renderNavBadges();render();
-}
-
-/* ============================================================
-   TASKS
-============================================================ */
-function renderTasks(v){
-  let list=state.data.tasks.slice();
-  const f=state.ui.taskFilter;
-  if(f==="open")list=list.filter(t=>!t.done);
-  else if(f==="overdue")list=list.filter(t=>!t.done&&isOverdue(t.due_date));
-  else if(f==="today")list=list.filter(t=>!t.done&&t.due_date===todayStr());
-  else if(f==="done")list=list.filter(t=>t.done);
-  list.sort((a,b)=>(a.due_date||"9999")<(b.due_date||"9999")?-1:1);
-  const counts={all:state.data.tasks.length,open:state.data.tasks.filter(t=>!t.done).length,
-    overdue:state.data.tasks.filter(t=>!t.done&&isOverdue(t.due_date)).length,
-    today:state.data.tasks.filter(t=>!t.done&&t.due_date===todayStr()).length,
-    done:state.data.tasks.filter(t=>t.done).length};
-  v.innerHTML=`<div class="toolbar">
-    ${["open","today","overdue","done","all"].map(k=>`<button class="btn sm ${f===k?"primary":""}" onclick="state.ui.taskFilter='${k}';render()">${k[0].toUpperCase()+k.slice(1)} <span style="opacity:.7">${counts[k]}</span></button>`).join("")}
-    <div class="spacer"></div><button class="btn primary" onclick="editTask()">+ Task</button></div>
-    ${list.length?`<div class="table-wrap"><table><thead><tr><th style="width:36px"></th><th>Task</th><th>Type</th><th>Related to</th><th>Due</th><th></th></tr></thead>
-    <tbody>${list.map(t=>{const c=byId(state.data.contacts,t.contact_id);const od=!t.done&&isOverdue(t.due_date);
-      return `<tr>
-        <td class="center"><input type="checkbox" ${t.done?"checked":""} style="width:16px" onclick="event.stopPropagation();toggleTask('${t.id}')"/></td>
-        <td onclick="editTask('${t.id}')"><span class="cell-main" style="${t.done?"text-decoration:line-through;color:var(--muted)":""}">${esc(t.title)}</span></td>
-        <td onclick="editTask('${t.id}')"><span class="chip">${t.type}</span></td>
-        <td onclick="editTask('${t.id}')">${c?`<a onclick="event.stopPropagation();openContact('${c.id}')">${esc(contactName(c))}</a>`:'<span class="muted">—</span>'}</td>
-        <td onclick="editTask('${t.id}')" class="${od?"":"cell-sub"}" style="${od?"color:var(--red);font-weight:700":""}">${t.due_date?fmtDate(t.due_date):"—"}${od?" ⚠":""}</td>
-        <td class="right"><button class="btn ghost sm" onclick="editTask('${t.id}')">Edit</button></td>
-      </tr>`;}).join("")}</tbody></table></div>`:emptyBox("No tasks here","")}`;
-}
-async function toggleTask(id,fromDash){
-  const t=byId(state.data.tasks,id);if(!t)return;
-  const done=!t.done;t.done=done;
-  const {error}=await sb.from("tasks").update({done,updated_at:new Date().toISOString()}).eq("id",id);
-  if(error){t.done=!done;return toastErr(error);}
-  toast(done?"Task completed ✓":"Task reopened","ok");renderNavBadges();
-  if(state.view==="tasks"||state.view==="dashboard")render();
-}
-function editTask(id,contactId){
-  const t=id?byId(state.data.tasks,id):{type:"todo",contact_id:contactId||null,due_date:todayStr()};
-  const contactOpts=`<option value="">— none —</option>`+state.data.contacts.map(c=>`<option value="${c.id}" ${t.contact_id===c.id?"selected":""}>${esc(contactName(c))}</option>`).join("");
-  const dealOpts=`<option value="">— none —</option>`+state.data.deals.map(d=>`<option value="${d.id}" ${t.deal_id===d.id?"selected":""}>${esc(d.title)}</option>`).join("");
-  openModal(id?"Edit task":"New task",`
-    <div class="field"><label>Title</label><input id="t-title" value="${esc(t.title||"")}" autofocus/></div>
-    <div class="row"><div class="field"><label>Type</label><select id="t-type">${TASK_TYPES.map(x=>`<option ${t.type===x?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field"><label>Due date</label><input id="t-due" type="date" value="${t.due_date||""}"/></div></div>
-    <div class="row"><div class="field"><label>Contact</label><select id="t-contact">${contactOpts}</select></div>
-      <div class="field"><label>Deal</label><select id="t-deal">${dealOpts}</select></div></div>
-    <div class="field"><label>Notes</label><textarea id="t-notes">${esc(t.notes||"")}</textarea></div>
-    ${id?`<div class="field"><label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="t-done" style="width:auto" ${t.done?"checked":""}/> Completed</label></div>`:""}
-  `,[id?{label:"Delete",cls:"danger",act:()=>delTask(id)}:null,
-     {label:"Cancel",cls:"ghost",act:closeModal},
-     {label:id?"Save":"Create",cls:"primary",act:()=>saveTask(id)}]);
-}
-async function saveTask(id){
-  const title=$("#t-title").value.trim();if(!title)return toast("Title required","err");
-  const payload={title,type:$("#t-type").value,due_date:$("#t-due").value||null,
-    contact_id:$("#t-contact").value||null,deal_id:$("#t-deal").value||null,notes:$("#t-notes").value.trim()||null,
-    updated_at:new Date().toISOString()};
-  if(id&&$("#t-done"))payload.done=$("#t-done").checked;
-  try{
-    if(id){const {error}=await sb.from("tasks").update(payload).eq("id",id);if(error)throw error;toast("Task updated","ok");}
-    else{const {error}=await sb.from("tasks").insert(withOrg(payload));if(error)throw error;toast("Task created","ok");}
-    closeModal();await reload("tasks");renderNavBadges();
-    if($("#modal-root").dataset.drawer&&payload.contact_id)renderContactDrawer(payload.contact_id);else render();
-  }catch(e){toastErr(e);}
-}
-async function delTask(id){
-  const {error}=await sb.from("tasks").delete().eq("id",id);if(error)return toastErr(error);
-  toast("Task deleted","ok");closeModal();await reload("tasks");renderNavBadges();render();
-}
-
-/* ============================================================
-   OUTREACH (templates + activity feed)
-============================================================ */
-/* ---------- Outreach hub helpers ---------- */
-const OUTREACH_TYPES=["email","call","text","meeting","dm","instagram_dm"];
-function isOutreachAct(a){return OUTREACH_TYPES.includes(a.type)||(!!a.channel&&a.channel!=="stage_change");}
-function actChannel(a){let ch=a.channel||a.type;if(ch==="dm")ch="instagram_dm";return ch;}
-function leadStats(c){
-  const acts=state.data.activities.filter(a=>a.contact_id===c.id);
-  const out=acts.filter(a=>isOutreachAct(a)&&a.direction!=="inbound");
-  const inbound=acts.filter(a=>a.direction==="inbound");
-  const channels=[...new Set(out.map(actChannel))];
-  const last=out[0]||null; // activities are ordered occurred_at desc from loadAll
-  const openTasks=state.data.tasks.filter(t=>t.contact_id===c.id&&!t.done&&t.due_date).sort((a,b)=>a.due_date<b.due_date?-1:1);
-  return {out,inbound,channels,last,nextFollow:openTasks[0]||null,hasReply:inbound.length>0,contacted:out.length>0};
-}
-function channelChip(ch){const lbl=CHANNEL_LABELS[ch]||ch;const ic={email:"✉",instagram_dm:"📷",call:"☎",text:"💬",meeting:"👥"}[ch]||"•";return `<span class="tag">${ic} ${esc(lbl)}</span>`;}
-
-function renderOutreach(v){
-  const tab=state.ui.outreachTab||"leads";
-  const dueCount=state.data.tasks.filter(t=>!t.done&&t.type==="follow-up"&&t.due_date&&t.due_date<=todayStr()).length;
-  const bar=`<div class="subtabs">
-    <button class="${tab==="leads"?"active":""}" onclick="state.ui.outreachTab='leads';render()">Work the list</button>
-    <button class="${tab==="followups"?"active":""}" onclick="state.ui.outreachTab='followups';render()">Follow-ups${dueCount?` (${dueCount})`:""}</button>
-    <button class="${tab==="templates"?"active":""}" onclick="state.ui.outreachTab='templates';render()">Templates</button>
-  </div>`;
-  if(tab==="templates"){v.innerHTML=bar+renderOutreachTemplates();return;}
-  if(tab==="followups"){v.innerHTML=bar+renderFollowupsQueue();return;}
-
-  const o=state.ui.outreach;
-  const weekAgo=Date.now()-7*86400*1000;
-  const stats=new Map();state.data.contacts.forEach(c=>stats.set(c.id,leadStats(c)));
-  let contactedWeek=0,replies=0,notContacted=0;
-  state.data.contacts.forEach(c=>{const s=stats.get(c.id);
-    if(s.out.some(a=>new Date(a.occurred_at).getTime()>weekAgo))contactedWeek++;
-    if(s.hasReply)replies++;
-    if(!s.contacted)notContacted++;});
-  const dueToday=state.data.tasks.filter(t=>!t.done&&t.due_date===todayStr()).length;
-
-  let list=state.data.contacts.slice();
-  if(o.status)list=list.filter(c=>c.status===o.status);
-  if(o.channel)list=list.filter(c=>{const s=stats.get(c.id);
-    if(o.channel==="none")return !s.contacted;
-    return s.channels.includes(o.channel);});
-  if(o.quick==="notcontacted")list=list.filter(c=>!stats.get(c.id).contacted);
-  else if(o.quick==="overdue")list=list.filter(c=>{const f=stats.get(c.id).nextFollow;return !!f&&isOverdue(f.due_date);});
-  else if(o.quick==="needs")list=list.filter(c=>{const f=stats.get(c.id).nextFollow;return !!f&&f.due_date<=todayStr();});
-
-  function prio(c){const s=stats.get(c.id),f=s.nextFollow;
-    if(f&&isOverdue(f.due_date))return 0;
-    if(f&&f.due_date===todayStr())return 1;
-    if(!s.contacted)return 2;
-    return 3;}
-  list.sort((a,b)=>{const pa=prio(a),pb=prio(b);if(pa!==pb)return pa-pb;
-    const sa=stats.get(a.id),sb=stats.get(b.id);
-    return (sa.last?new Date(sa.last.occurred_at).getTime():0)-(sb.last?new Date(sb.last.occurred_at).getTime():0);});
-  state._outreachList=list.map(c=>c.id);
-
-  const metrics=`<div class="grid cards" style="margin-bottom:16px">
-    ${stat("Contacted this week",contactedWeek,"✉","last 7 days")}
-    ${stat("Replies",replies,"↩",replies?"leads replied":"none yet")}
-    ${stat("Follow-ups due today",dueToday,"⏰",dueToday?'<span style="color:var(--amber)">action needed</span>':"all clear")}
-    ${stat("Not yet contacted",notContacted,"○","fresh leads")}
-  </div>`;
-
-  const quicks={all:"All",needs:"Needs follow-up",overdue:"Overdue",notcontacted:"Not contacted"};
-  const toolbar=`<div class="toolbar">
-    ${Object.keys(quicks).map(k=>`<button class="btn sm ${o.quick===k?"primary":""}" onclick="state.ui.outreach.quick='${k}';render()">${quicks[k]}</button>`).join("")}
-    <select style="max-width:160px" onchange="state.ui.outreach.channel=this.value;render()">
-      <option value="">All channels</option>
-      <option value="email" ${o.channel==="email"?"selected":""}>✉ Email used</option>
-      <option value="instagram_dm" ${o.channel==="instagram_dm"?"selected":""}>📷 Instagram DM used</option>
-      <option value="none" ${o.channel==="none"?"selected":""}>None yet</option>
-    </select>
-    <select style="max-width:150px" onchange="state.ui.outreach.status=this.value;render()">
-      <option value="">All statuses</option>
-      ${CONTACT_STATUSES.map(st=>`<option ${o.status===st?"selected":""}>${st}</option>`).join("")}
-    </select>
-    <div class="spacer"></div>
-    <span class="muted" style="font-size:12.5px">${list.length} lead${list.length===1?"":"s"}</span>
-    <button class="btn primary" onclick="workList()" ${list.length?"":"disabled"}>▶ Work the list</button>
-  </div>`;
-
-  const rows=list.map(c=>{
-    const s=stats.get(c.id),f=s.nextFollow,od=f&&isOverdue(f.due_date);
-    const lastTxt=s.last?`${relTime(s.last.occurred_at)} · ${CHANNEL_LABELS[actChannel(s.last)]||actChannel(s.last)}`:'<span class="muted">never</span>';
-    const chans=s.channels.length?s.channels.map(channelChip).join(""):'<span class="muted">—</span>';
-    const follow=f
-      ?`<span style="${od?'color:var(--red);font-weight:700':''}">${fmtDate(f.due_date)}${od?' ⚠ overdue':''}</span>`
-      :(s.contacted?'<span class="muted">—</span>':'<span class="chip" style="color:var(--gold2);border-color:var(--gold)">new lead</span>');
-    return `<tr onclick="workLead('${c.id}')">
-      <td data-label="Lead"><div class="cell-main">${emailDot(c)}${esc(contactName(c))}</div><div class="cell-sub">${esc(companyName(c.company_id)||c.title||"")}</div></td>
-      <td data-label="Channels">${chans}</td>
-      <td data-label="Last" class="cell-sub">${lastTxt}</td>
-      <td data-label="Stage"><span class="st st-${c.status}">${c.status}</span></td>
-      <td data-label="Next">${follow}</td>
-      <td data-label="" class="right"><button class="btn primary sm" onclick="event.stopPropagation();workLead('${c.id}')">✨ Work</button></td>
-    </tr>`;}).join("");
-
-  v.innerHTML=bar+metrics+toolbar+(list.length?`<div class="table-wrap"><table class="cardify">
-    <thead><tr><th>Lead</th><th>Channels used</th><th>Last outreach</th><th>Stage</th><th>Next follow-up</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`:emptyBox("No leads match","Try clearing filters, or add contacts to start working the list."));
-}
-function renderFollowupsQueue(){
-  const due=state.data.tasks.filter(t=>!t.done&&t.type==="follow-up"&&t.due_date)
-    .sort((a,b)=>a.due_date<b.due_date?-1:1);
-  const overdue=due.filter(t=>isOverdue(t.due_date));
-  const today=due.filter(t=>t.due_date===todayStr());
-  const upcoming=due.filter(t=>t.due_date>todayStr());
-  const metrics=`<div class="grid cards" style="margin-bottom:14px">
-    ${stat("Overdue",overdue.length,"⚠",overdue.length?'<span style="color:var(--red)">work these first</span>':"none")}
-    ${stat("Due today",today.length,"⏰",today.length?"ready to send":"clear")}
-    ${stat("Upcoming",upcoming.length,"📅","scheduled ahead")}
-  </div>`;
-  function group(title,arr){
-    if(!arr.length)return "";
-    return `<div class="panel" style="margin-bottom:14px"><h3>${title} <span class="sub">· ${arr.length}</span></h3>
-      <table class="cardify"><tbody>${arr.map(t=>{const c=byId(state.data.contacts,t.contact_id);
-        const od=isOverdue(t.due_date);
-        return `<tr>
-          <td data-label="Lead" onclick="${c?`openContact('${c.id}')`:''}"><div class="cell-main">${c?emailDot(c)+esc(contactName(c)):esc(t.title)}</div>
-            <div class="cell-sub">${c?esc(companyName(c.company_id)||c.title||''):''}</div></td>
-          <td data-label="Due" class="${od?'':'cell-sub'}" style="${od?'color:var(--red);font-weight:700':''}">${fmtDate(t.due_date)}${od?' ⚠':''}</td>
-          <td data-label="" class="right">
-            ${c?`<button class="btn primary sm" onclick="event.stopPropagation();sendFollowup('${c.id}','${t.id}')">Send</button> `:""}
-            <button class="btn ghost sm" onclick="event.stopPropagation();toggleTask('${t.id}')">Done</button></td>
-        </tr>`;}).join("")}</tbody></table></div>`;
-  }
-  const content=due.length?group("Overdue",overdue)+group("Due today",today)+group("Upcoming",upcoming)
-    :emptyBox("No follow-ups scheduled","Send outreach from Work the list or a lead to auto-schedule follow-ups.");
-  return metrics+content;
-}
-function renderOutreachTemplates(){
-  const A=state.data.activities.filter(a=>a.type!=="stage_change"&&a.type!=="note");
-  return `<div class="dashgrid">
-    <div>
-      <div class="panel" style="margin-bottom:14px">
-        <h3>Message templates <span class="sub">· reusable outreach</span>
-          <button class="btn sm primary" style="margin-left:auto" onclick="editTemplate()">+ Template</button></h3>
-        ${state.data.templates.length?state.data.templates.map(t=>`<div class="panel" style="padding:11px 13px;margin-bottom:9px;background:var(--panel2)">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div><b>${esc(t.name)}</b> <span class="chip">${t.channel}</span></div>
-            <div><button class="btn ghost sm" onclick="editTemplate('${t.id}')">Edit</button></div></div>
-          ${t.subject?`<div class="cell-sub" style="margin-top:5px"><b>Subject:</b> ${esc(t.subject)}</div>`:""}
-          ${t.body?`<div class="tb" style="margin-top:4px;font-size:12.5px;color:#c9cdd8">${esc(t.body.slice(0,180))}${t.body.length>180?"…":""}</div>`:""}
-        </div>`).join(""):emptyBox("No templates yet","Create a reusable email or call script.")}
-      </div>
-    </div>
-    <div>
-      <div class="panel">
-        <h3>Recent outreach</h3>
-        ${A.length?`<ul class="timeline">${A.slice(0,12).map(activityItem).join("")}</ul>`:emptyBox("No outreach logged","Work the list to start reaching out.")}
-      </div>
-    </div>
-  </div>`;
-}
-/* ---------- Work-the-list queue ---------- */
-function workLead(id){
-  const list=state._outreachList||[];
-  let pos=list.indexOf(id);
-  if(pos<0)openEmailGen(id,{queue:[id],pos:0});
-  else openEmailGen(id,{queue:list,pos});
-}
-function workList(){
-  const list=state._outreachList||[];
-  if(!list.length)return;
-  openEmailGen(list[0],{queue:list,pos:0});
-}
-function editTemplate(id){
-  const t=id?byId(state.data.templates,id):{channel:"email"};
-  openModal(id?"Edit template":"New template",`
-    <div class="row"><div class="field"><label>Name</label><input id="tp-name" value="${esc(t.name||"")}" autofocus placeholder="Cold intro"/></div>
-      <div class="field"><label>Channel</label><select id="tp-channel">${["email","call","text"].map(x=>`<option ${t.channel===x?"selected":""}>${x}</option>`).join("")}</select></div></div>
-    <div class="field"><label>Subject</label><input id="tp-subject" value="${esc(t.subject||"")}"/></div>
-    <div class="field"><label>Body</label><textarea id="tp-body" style="min-height:150px">${esc(t.body||"")}</textarea></div>
-    <p class="muted" style="font-size:11.5px;margin:0">Tip: use these when logging outreach on a contact to auto-fill the message.</p>
-  `,[id?{label:"Delete",cls:"danger",act:()=>delTemplate(id)}:null,
-     {label:"Cancel",cls:"ghost",act:closeModal},
-     {label:id?"Save":"Create",cls:"primary",act:()=>saveTemplate(id)}]);
-}
-async function saveTemplate(id){
-  const name=$("#tp-name").value.trim();if(!name)return toast("Name required","err");
-  const payload={name,channel:$("#tp-channel").value,subject:$("#tp-subject").value.trim()||null,body:$("#tp-body").value.trim()||null};
-  try{
-    if(id){const {error}=await sb.from("templates").update(payload).eq("id",id);if(error)throw error;toast("Template saved","ok");}
-    else{const {error}=await sb.from("templates").insert(withOrg(payload));if(error)throw error;toast("Template created","ok");}
-    closeModal();await reload("templates");render();
-  }catch(e){toastErr(e);}
-}
-async function delTemplate(id){
-  const {error}=await sb.from("templates").delete().eq("id",id);if(error)return toastErr(error);
-  toast("Template deleted","ok");closeModal();await reload("templates");render();
-}
-
-/* ============================================================
-   CAMPAIGNS (bulk email) + ENRICHMENT
-============================================================ */
-function providerReady(){return !!(state.org&&state.org.email_provider==="smtp"&&state.org.from_email&&state.org.mailing_address);}
-function allTags(){const s=new Set();state.data.contacts.forEach(c=>(c.tags||[]).forEach(t=>t&&s.add(t)));return [...s].sort();}
-function campaignBase(f){
-  let list=state.data.contacts.slice();
-  if(f.stage)list=list.filter(c=>c.status===f.stage);
-  if(f.tag)list=list.filter(c=>(c.tags||[]).includes(f.tag));
-  const q=(f.search||"").toLowerCase();
-  if(q)list=list.filter(c=>(contactName(c)+" "+(c.email||"")+" "+companyName(c.company_id)).toLowerCase().includes(q));
-  return list;
-}
-function campaignEligible(f){
-  const base=campaignBase(f);
-  const eligible=base.filter(c=>c.email&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");
-  return {base,eligible,
-    noEmail:base.filter(c=>!c.email).length,
-    unsub:base.filter(c=>c.email&&c.unsubscribed).length,
-    bad:base.filter(c=>c.email&&!c.unsubscribed&&(c.email_status==="bounced"||c.email_status==="invalid")).length};
-}
-function mergeClient(tpl,c){
-  const map={first_name:c.first_name||"there",first:c.first_name||"there",last_name:c.last_name||"",
-    name:contactName(c),company:companyName(c.company_id)||"your business",business:companyName(c.company_id)||"your business",city:c.city||"your area",title:c.title||"",email:c.email||""};
-  return String(tpl||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);
-}
-function renderCampaigns(v){
-  const ready=providerReady();
-  const camps=state.data.campaigns, E=state.data.emailEvents;
-  const sentTotal=E.filter(e=>e.status==="sent").length;
-  const missing=state.data.contacts.filter(c=>!c.email&&c.company_id&&!c.unsubscribed).length;
-  const banner=ready
-    ?`<div class="banner info">✅ ProtiqAI SMTP connected · from <b>${esc(state.org.from_email)}</b> · cap ${state.org.daily_cap||100}/day</div>`
-    :`<div class="banner warn">⚠ No email provider connected. Build & preview campaigns now — sends are <b>queued</b> (nothing is sent) until you connect ProtiqAI SMTP in <a onclick="navigate('settings')" style="cursor:pointer;text-decoration:underline">Settings</a>.</div>`;
-  v.innerHTML=banner+`
-  <div class="toolbar">
-    <button class="btn primary" onclick="newCampaign()">📣 New campaign</button>
-    ${missing?`<button class="btn" onclick="enrichMissing()">🔎 Find ${missing} missing email${missing===1?"":"s"}</button>`:""}
-    <div class="spacer"></div>
-    <span class="muted" style="font-size:12.5px">${sentTotal} emails sent all-time</span>
   </div>
-  <div class="dashgrid">
-    <div class="panel"><h3>Campaigns</h3>
-      ${camps.length?`<table class="cardify"><thead><tr><th>Name</th><th>Status</th><th>Sent</th><th>When</th></tr></thead><tbody>
-        ${camps.map(c=>`<tr onclick="openCampaign('${c.id}')">
-          <td data-label="Name"><div class="cell-main">${esc(c.name)}</div><div class="cell-sub">${esc((c.subject||"").slice(0,42))}</div></td>
-          <td data-label="Status"><span class="pill">${c.status}</span></td>
-          <td data-label="Sent">${c.sent_count||0}/${c.total||0}${c.failed_count?` <span style="color:var(--red)">·${c.failed_count}✗</span>`:""}</td>
-          <td data-label="When" class="cell-sub">${relTime(c.created_at)}</td>
-        </tr>`).join("")}</tbody></table>`:emptyBox("No campaigns yet","Create your first bulk email — it'll preview before anything sends.")}
-    </div>
-    <div class="panel"><h3>Recent sends <span class="sub">· log</span></h3>
-      ${E.length?`<div style="max-height:440px;overflow:auto">${E.slice(0,40).map(emailEventRow).join("")}</div>`:emptyBox("No send log yet","Every email you send is recorded here.")}
-    </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:10px">Preview <span class="mut" style="font-weight:600">(first 40)</span></div>
+    ${preview}
   </div>`;
 }
-function openCampaign(id){
-  const c=byId(state.data.campaigns,id);if(!c)return;
-  const evs=state.data.emailEvents.filter(e=>e.campaign_id===id);
-  openModal(c.name,`
-    <div class="grid cards" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px">
-      ${stat("Total",c.total||0,"◔","")}${stat("Sent",c.sent_count||0,"✓","")}${stat("Failed",c.failed_count||0,"⚠","")}</div>
-    <div class="field"><label>Subject</label><div>${esc(c.subject||"")}</div></div>
-    <div class="field"><label>Message</label><div class="tb" style="white-space:pre-wrap;max-height:150px;overflow:auto">${esc(c.body||"")}</div></div>
-    <label>Recipients (${evs.length})</label>
-    <div style="max-height:220px;overflow:auto">${evs.map(emailEventRow).join("")||'<span class="muted">—</span>'}</div>
-  `,[{label:"Close",cls:"ghost",act:closeModal}],true);
+function leadCard(c){
+  const tags=[];
+  if(isInbound(c))tags.push('<span class="tag" style="color:var(--good)">🔥 warm inbound</span>');
+  if(c.email&&c.email.includes("@"))tags.push('<span class="tag em">✉ email</span>');
+  if(c.instagram&&igHandle(c.instagram))tags.push('<span class="tag ig">📷 @'+esc(igHandle(c.instagram))+'</span>');
+  if(c.business_type)tags.push('<span class="tag">'+esc(c.business_type)+'</span>');
+  return `<div class="lead">
+    <div class="nm">${esc(c.company||((c.first_name||"")+" "+(c.last_name||"")).trim()||"—")}</div>
+    <div class="meta">${esc([c.city,c.state].filter(Boolean).join(", "))||"—"}</div>
+    <div>${tags.join("")}</div>
+  </div>`;
 }
-/* ---- compose -> preview -> send ---- */
-let cmpDraft={name:"",subject:"",body:"",templateId:""};
-function newCampaign(){
-  state.ui.campaign={stage:"",tag:"",search:"",onlyEmailable:true};
-  cmpDraft={name:"CeasAI outreach "+todayStr(),subject:"",body:"",templateId:""};
-  openCampaignCompose();
-}
-function openCampaignCompose(){
-  const tags=allTags();
-  const tplOpts=`<option value="">— start from a template —</option>`+state.data.templates.filter(t=>!t.channel||t.channel==="email").map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("");
-  const el=campaignEligible(state.ui.campaign);
-  openModal("New campaign",`
-    <div class="field"><label>Campaign name</label><input id="cmp-name" value="${esc(cmpDraft.name)}"/></div>
-    <div class="panel" style="background:var(--panel2);padding:12px;margin-bottom:12px">
-      <label style="margin-bottom:8px">Audience — select by stage, tag or search</label>
-      <div class="row" style="flex-wrap:wrap;gap:8px">
-        <div class="field" style="margin-bottom:8px"><select id="cmp-stage" onchange="cmpFilter()"><option value="">All stages</option>${LEAD_STAGES.map(s=>`<option ${state.ui.campaign.stage===s?"selected":""}>${s}</option>`).join("")}</select></div>
-        <div class="field" style="margin-bottom:8px"><select id="cmp-tag" onchange="cmpFilter()"><option value="">All tags</option>${tags.map(t=>`<option ${state.ui.campaign.tag===t?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
-      </div>
-      <div class="field" style="margin-bottom:8px"><input id="cmp-search" placeholder="Search name / company / email…" oninput="cmpFilter()" value="${esc(state.ui.campaign.search)}"/></div>
-      <div id="cmp-count" style="font-size:12.5px">${cmpCountText(el)}</div>
-    </div>
-    <div class="field"><label>Template</label><select id="cmp-tpl" onchange="cmpApplyTpl(this.value)">${tplOpts}</select></div>
-    <div class="field"><label>Subject</label><input id="cmp-subject" value="${esc(cmpDraft.subject)}" placeholder="A quick idea for {{company}}"/></div>
-    <div class="field"><label>Message</label><textarea id="cmp-body" style="min-height:170px" placeholder="Hi {{first_name}}, …">${esc(cmpDraft.body)}</textarea></div>
-    <p class="muted" style="font-size:11.5px;margin:0">Merge fields: <b>{{first_name}}</b>, <b>{{company}}</b>, <b>{{title}}</b> — each email is personalized. A compliant unsubscribe link + your mailing address are added automatically.</p>
-  `,[{label:"Cancel",cls:"ghost",act:closeModal},{label:"Preview →",cls:"primary",act:campaignPreview}],true);
-}
-function cmpReadForm(){
-  if($("#cmp-stage")){state.ui.campaign.stage=$("#cmp-stage").value;state.ui.campaign.tag=$("#cmp-tag").value;state.ui.campaign.search=$("#cmp-search").value;
-    cmpDraft.name=$("#cmp-name").value;cmpDraft.subject=$("#cmp-subject").value;cmpDraft.body=$("#cmp-body").value;}
-}
-function cmpFilter(){state.ui.campaign.stage=$("#cmp-stage").value;state.ui.campaign.tag=$("#cmp-tag").value;state.ui.campaign.search=$("#cmp-search").value;
-  const el=campaignEligible(state.ui.campaign);$("#cmp-count").innerHTML=cmpCountText(el);}
-function cmpCountText(el){
-  return `<b style="color:var(--gold2)">${el.eligible.length}</b> emailable recipient${el.eligible.length===1?"":"s"}`
-    +(el.noEmail?` · <span class="muted">${el.noEmail} no email</span>`:"")
-    +(el.unsub?` · <span style="color:var(--amber)">${el.unsub} unsubscribed → skipped</span>`:"")
-    +(el.bad?` · <span style="color:var(--red)">${el.bad} bad email</span>`:"");
-}
-function cmpApplyTpl(id){const t=byId(state.data.templates,id);cmpDraft.templateId=id;if(!t)return;if(t.subject)$("#cmp-subject").value=t.subject;if(t.body)$("#cmp-body").value=t.body;}
-function campaignPreview(){
-  cmpReadForm();
-  const el=campaignEligible(state.ui.campaign);
-  if(!el.eligible.length){toast("No emailable recipients match — try enriching or widening the audience","err");return;}
-  if(!cmpDraft.subject.trim()||!cmpDraft.body.trim()){toast("Add a subject and message","err");return;}
-  const sample=el.eligible[0], ready=providerReady();
-  const sendLabel=ready?`Send to ${el.eligible.length} →`:`Queue ${el.eligible.length} (no provider)`;
-  openModal("Preview & send",`
-    <div class="muted" style="font-size:12.5px;margin-bottom:8px">Personalized preview for <b style="color:var(--text)">${esc(contactName(sample))}</b> · ${esc(sample.email)}</div>
-    <div class="eg-preview">
-      <div style="font-size:11px;color:var(--muted)">Subject</div>
-      <div style="font-weight:700;margin-bottom:8px">${esc(mergeClient(cmpDraft.subject,sample))}</div>
-      <div style="font-size:11px;color:var(--muted)">Body</div>
-      <div class="tb" style="white-space:pre-wrap">${esc(mergeClient(cmpDraft.body,sample))}</div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
-      <div class="muted" style="font-size:11px">— ${esc((state.org&&(state.org.from_name||state.org.name))||"CeasAI")}${state.org&&state.org.mailing_address?"<br>"+esc(state.org.mailing_address):'<br><span style="color:var(--amber)">⚠ add a mailing address in Settings (legally required)</span>'}<br>Unsubscribe link appended automatically to every message</div>
-    </div>
-    <div class="banner ${ready?'info':'warn'}" style="margin-top:12px">${ready?('Sends via ProtiqAI SMTP, paced ~1/sec, up to your '+((state.org&&state.org.daily_cap)||100)+'/day cap.'+(el.unsub?' '+el.unsub+' unsubscribed contacts are skipped.':'')):'No provider connected — this saves as a <b>queued</b> campaign. Nothing is sent until you connect ProtiqAI SMTP in Settings.'}</div>
-  `,[{label:"← Back",cls:"ghost",act:openCampaignCompose},{label:sendLabel,cls:"primary",act:campaignSend}],true);
-}
-async function campaignSend(){
-  const el=campaignEligible(state.ui.campaign), ids=el.eligible.map(c=>c.id);
-  if(!ids.length){toast("No recipients","err");return;}
-  const ready=providerReady();
-  document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=true);
+function setSeg(k,v){state.segment[k]=v;render();}
+function toggleSeg(k){state.segment[k]=!state.segment[k];render();}
+
+async function importLeads(btn){
+  if(!state.org){toast("Org not ready","err");return;}
+  if(state.contacts.some(c=>c.source==="mindbody")){toast("Already imported","ok");return;}
+  btn.disabled=true;const o=btn.innerHTML;btn.innerHTML='<span class="spin"></span> Importing…';
   try{
-    const {data:camp,error:ce}=await sb.from("campaigns").insert(withOrg({
-      name:cmpDraft.name||"Campaign",subject:cmpDraft.subject,body:cmpDraft.body,
-      template_id:cmpDraft.templateId||null,total:ids.length,
-      status:ready?"queued":"draft",daily_cap:(state.org&&state.org.daily_cap)||100})).select().single();
+    const res=await fetch("leads-seed.json",{cache:"no-store"});
+    const seed=await res.json();
+    const org_id=state.org.id;
+    let done=0;
+    for(let i=0;i<seed.length;i+=200){
+      const batch=seed.slice(i,i+200).map(s=>({
+        org_id, first_name:"", last_name:"",
+        company:s.company||null, email:s.email||null, city:s.city||null, state:s.state||null,
+        instagram:s.instagram||null, website:s.website||null,
+        business_type:s.business_type||"Other", tags:s.tags||[],
+        source:"mindbody", status:"New"
+      }));
+      const {error}=await sb.from("contacts").insert(batch);
+      if(error)throw error;
+      done+=batch.length;
+      btn.innerHTML='<span class="spin"></span> '+done+" / "+seed.length;
+    }
+    toast("Imported "+done+" leads","ok");
+    await loadAll();render();
+  }catch(e){toastErr(e);btn.disabled=false;btn.innerHTML=o;}
+}
+
+/* ============ EMAIL — ONE CLICK ============ */
+function viewEmail(){
+  const tpl=tplGet();
+  const seg=segFilter(state.contacts);
+  const send=emailable(seg);
+  const org=state.org||{};
+  const ready=!!org.mailing_address && !!(org.from_email);
+  const sample=send[0]||seg[0]||null;
+  return `
+  <div class="h1">Mass Email</div>
+  <div class="sub">Template B · sends through your Gmail SMTP engine</div>
+  <div class="card">
+    <div class="mut" style="font-weight:700;margin-bottom:6px">Segment</div>
+    <div style="font-weight:800;font-size:15px">${esc(segLabel())}</div>
+    <div style="margin-top:10px;display:flex;align-items:baseline;gap:8px">
+      <div class="big" style="color:var(--accent)">${num(send.length)}</div>
+      <div class="mut" style="font-weight:700">will receive this email</div>
+    </div>
+    <div class="mut" style="font-size:12.5px;margin-top:4px">of ${num(seg.length)} in segment · suppressed &amp; no-email leads are skipped automatically</div>
+    <button class="btn ghost block" style="margin-top:10px" onclick="navigate('leads')">Change segment →</button>
+  </div>
+  ${ready?"":`<div class="banner warn">⚠ Set your From email + mailing address in <b>Settings</b> before sending (legally required).</div>`}
+  <div class="card">
+    <div class="field"><label>Subject</label><input id="e-subj" value="${esc(tpl.subject)}" oninput="saveTpl()"/></div>
+    <div class="field" style="margin-bottom:6px"><label>Body — {{business}} and {{city}} auto-fill per lead</label>
+      <textarea id="e-body" oninput="saveTpl()">${esc(tpl.body)}</textarea></div>
+    <div class="mut" style="font-size:12px">A footer with your name, address and an unsubscribe link is added automatically to every email.</div>
+    <button class="btn ghost" style="margin-top:8px" onclick="resetTpl()">↺ Reset to Template B</button>
+  </div>
+  ${sample?`<div class="card">
+    <div style="font-weight:800;margin-bottom:8px">Preview <span class="mut" style="font-weight:600">— ${esc(sample.company||"lead")}</span></div>
+    <div class="qbox"><b>${esc(mergeMail(tpl.subject,sample))}</b>\n\n${esc(mergeMail(tpl.body,sample))}</div>
+  </div>`:""}
+  <button class="btn primary block lg" ${send.length&&ready?"":"disabled"} onclick="confirmSend()">
+    🚀 Send to all ${num(send.length)}
+  </button>
+  <div class="mut center" style="font-size:12px;margin-top:8px">Paced sending · ${num((org.daily_cap||100))}/day cap · one email per business</div>`;
+}
+function mergeMail(t,c){
+  const map={business:c.company||"your business",company:c.company||"your business",
+    city:c.city||"your area",first_name:c.first_name||"there",first:c.first_name||"there"};
+  return String(t||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);
+}
+function saveTpl(){tplSet({subject:$("#e-subj").value,body:$("#e-body").value});}
+function resetTpl(){tplSet({...TEMPLATE_B});render();}
+function confirmSend(){
+  const seg=segFilter(state.contacts);const send=emailable(seg);
+  if(!send.length)return;
+  const sheet=`<div class="modal" onclick="if(event.target===this)this.remove()"><div class="sheet">
+    <div class="h1">Send to ${num(send.length)} businesses?</div>
+    <div class="sub">${esc(segLabel())} · through your Gmail SMTP engine</div>
+    <div class="banner info">Emails are personalized, paced, capped at ${num((state.org.daily_cap||100))}/day, and every send is logged. Unsubscribed leads are skipped.</div>
+    <button class="btn primary block lg" onclick="doSend(this)">Yes — send now</button>
+    <button class="btn ghost block" style="margin-top:8px" onclick="this.closest('.modal').remove()">Cancel</button>
+  </div></div>`;
+  document.body.insertAdjacentHTML("beforeend",sheet);
+}
+async function doSend(btn){
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Sending…';
+  const tpl=tplGet();
+  const seg=segFilter(state.contacts);const send=emailable(seg);
+  const ids=send.map(c=>c.id);
+  try{
+    const {data:camp,error:ce}=await sb.from("campaigns").insert({
+      org_id:state.org.id, name:"Mass email — "+segLabel(), subject:tpl.subject, body:tpl.body,
+      status:"queued", total:ids.length, daily_cap:(state.org.daily_cap||100)
+    }).select().maybeSingle();
     if(ce)throw ce;
-    if(!ready){
-      const rows=ids.map(id=>{const c=byId(state.data.contacts,id);
-        return withOrg({campaign_id:camp.id,contact_id:id,to_email:c.email,subject:mergeClient(cmpDraft.subject,c),status:"queued",provider:null,channel:"email"});});
-      await sb.from("email_events").insert(rows);
-      toast("Campaign queued ("+ids.length+"). Connect ProtiqAI SMTP to send.","ok");
-      closeModal();await Promise.all([reload("campaigns"),reload("emailEvents")]);renderNavBadges();render();return;
-    }
-    toast("Sending "+ids.length+"… keep this open","ok");
-    const {data,error}=await sb.functions.invoke("send-campaign",{body:{campaign_id:camp.id,contact_ids:ids,subject:cmpDraft.subject,body:cmpDraft.body,template_id:cmpDraft.templateId||null}});
+    const {data,error}=await sb.functions.invoke("send-campaign",{body:{
+      campaign_id:camp?camp.id:null, contact_ids:ids, subject:tpl.subject, body:tpl.body
+    }});
     if(error)throw error;
-    if(data&&data.reason==="no_provider")toast("SMTP secrets not set server-side — saved as queued","err");
-    else if(data&&data.reason==="no_address")toast("Add a mailing address in Settings first","err");
-    else if(data&&data.reason==="smtp_connect_failed")toast("SMTP connection failed - check host/port","err");
-    else if(data&&data.ok)toast(`Sent ${data.sent} · failed ${data.failed} · ${data.skipped_suppressed} suppressed`,"ok");
-    else toast((data&&data.message)||"Send failed","err");
-    closeModal();await Promise.all([reload("campaigns"),reload("emailEvents"),reload("contacts")]);renderNavBadges();render();
-  }catch(e){toastErr(e);document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=false);}
+    const modal=btn.closest(".modal");if(modal)modal.remove();
+    if(data&&data.ok){
+      toast("Sent "+num(data.sent||0)+(data.capped_over_daily_limit?" · "+data.capped_over_daily_limit+" held for tomorrow":""),"ok");
+    }else if(data&&data.reason==="no_provider"){toast("SMTP not configured in Supabase secrets","err");}
+    else if(data&&data.reason==="no_address"){toast("Add a mailing address in Settings first","err");navigate("settings");return;}
+    else if(data&&data.reason==="smtp_connect_failed"){toast("SMTP unreachable — check secrets/port 465","err");}
+    else{toast((data&&data.message)||"Send did not complete","err");}
+    await loadMetrics();navigate("dashboard");
+  }catch(e){toastErr(e);btn.disabled=false;btn.innerHTML="Yes — send now";}
 }
-/* ============================================================
-   DAILY EMAIL QUEUE (Phase 4) - up to daily_cap eligible gym
-   businesses/day, one email per business, via ProtiqAI SMTP.
-============================================================ */
-const DAILY_DEFAULT={
-  subject:"Quick question about {{business}}",
-  body:"Hi {{first_name}},\n\nI came across {{business}} and love what you're building in {{city}}. I run CeasAI - we help gyms turn more inquiries into paying members with AI that answers leads and follows up 24/7, so nothing slips through the cracks.\n\nWould you be open to a 2-minute look at how it could work for {{business}}?\n\nThanks,"
-};
-let dqDraft={subject:DAILY_DEFAULT.subject,body:DAILY_DEFAULT.body};
 
-function dqEmailable(){
-  return state.data.contacts.filter(c=>c.email&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");
+/* ============ IG DM CENTER ============ */
+const DM_GREET=["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first} — hope you're good!","Hey there!","Hi! 👋"];
+const DM_OPEN=["love what you're doing at {biz}.","been checking out {biz} — really great stuff.","came across {biz} and had to reach out.","{biz} caught my eye — impressed with what you're building.","found {biz} while looking at {type}s in {city}."];
+const DM_VALUE=["I build simple AI tools for {type}s that capture every lead and follow up (and book them) automatically.","We help {type}s like yours stop losing leads — one simple app that replies + books clients in seconds.","I make one little app that handles the follow-up + booking for {type}s so you can focus on the work.","custom AI that answers new leads in seconds so none slip through the cracks."];
+const DM_CTA=["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {biz}?","Mind if I share a quick example?","Worth a quick look? no pressure."];
+function typeWord(t){return ({"Gym":"gym","CrossFit":"CrossFit box","MMA / Boxing":"gym","Yoga / Pilates":"studio","Personal Training":"training studio","Boutique Studio":"studio","Wellness / Spa":"wellness business","Other":"business"})[t]||"business";}
+function genDM(c){
+  const ctx={first:(c.first_name||"there"),biz:c.company||"your studio",city:c.city||"your area",type:typeWord(c.business_type)};
+  const parts=[pick(DM_GREET),pick(DM_OPEN),pick(DM_VALUE),pick(DM_CTA)];
+  return parts.map(p=>String(p).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:m)).join(" ")
+    .replace(/\s{2,}/g," ").trim();
 }
-// Today's queue: eligible = never-emailed OR follow-up due; deduped one per business;
-// businesses already emailed today are skipped; capped at daily_cap.
-function dailyQueueEligible(){
-  const cap=(state.org&&state.org.daily_cap)||100;
-  const today=new Date().toISOString().slice(0,10);
-  const E=state.data.emailEvents||[];
-  const sentTodayCompanies=new Set();
-  E.forEach(e=>{if(e.status==="sent"&&e.sent_at&&e.sent_at.slice(0,10)===today){const c=byId(state.data.contacts,e.contact_id);if(c&&c.company_id)sentTodayCompanies.add(c.company_id);}});
-  const eligible=dqEmailable().filter(c=>{
-    const never=!c.last_emailed_at;
-    const due=c.next_followup_at&&c.next_followup_at<=today;
-    return never||due;
-  });
-  eligible.sort((a,b)=>{
-    const ad=(a.next_followup_at&&a.next_followup_at<=today)?0:1;
-    const bd=(b.next_followup_at&&b.next_followup_at<=today)?0:1;
-    if(ad!==bd)return ad-bd;
-    return (a.created_at||"").localeCompare(b.created_at||"");
-  });
-  const seen=new Set(),pick=[];
-  for(const c of eligible){
-    const comp=c.company_id||("__nc_"+c.id);
-    if(seen.has(comp))continue;
-    if(c.company_id&&sentTodayCompanies.has(c.company_id))continue;
-    seen.add(comp);pick.push(c);
-    if(pick.length>=cap)break;
+function viewDM(){
+  const seg=withIG(segFilter(state.contacts));
+  if(!state.dm.queue.length || state.dm._segSig!==segLabel()){
+    state.dm.queue=seg.map(c=>c.id);state.dm.idx=0;state.dm._segSig=segLabel();state.dm.text="";
   }
-  return pick;
-}
-function dailyReport(){
-  const today=new Date().toISOString().slice(0,10);
-  const E=state.data.emailEvents||[];
-  const isToday=x=>x&&x.slice(0,10)===today;
-  const sent=E.filter(e=>e.status==="sent"&&isToday(e.sent_at)).length;
-  const failed=E.filter(e=>e.status==="failed"&&isToday(e.created_at)).length;
-  const queued=E.filter(e=>e.status==="queued"&&isToday(e.created_at)).length;
-  const remaining=new Set();
-  dqEmailable().forEach(c=>{if(!c.last_emailed_at)remaining.add(c.company_id||("__nc_"+c.id));});
-  return {sent,failed,queued,remaining:remaining.size,queueSize:dailyQueueEligible().length};
-}
-function renderDaily(v){
-  const ready=providerReady();
-  const r=dailyReport();
-  const cap=(state.org&&state.org.daily_cap)||100;
-  const pick=dailyQueueEligible();
-  const banner=ready
-    ?`<div class="banner info">✅ ProtiqAI SMTP connected · from <b>${esc((state.org&&state.org.from_email)||"")}</b> · cap ${cap}/day</div>`
-    :`<div class="banner warn">⚠ Preview mode - build today's queue now, but <b>nothing sends</b> until you connect ProtiqAI SMTP (paste SMTP secrets in Supabase + set provider in <a onclick="navigate('settings')" style="cursor:pointer;text-decoration:underline">Settings</a>).</div>`;
-  v.innerHTML=banner+`
-  <div class="toolbar">
-    <button class="btn primary" onclick="openDailyQueue()" ${pick.length?"":"disabled"}>⚡ Generate today's queue (${pick.length})</button>
-    <div class="spacer"></div>
-    <span class="muted" style="font-size:12.5px">${ready?"Sends via ProtiqAI SMTP":"Queue / preview only"}</span>
+  const q=state.dm.queue;const done=state.dm.idx;
+  return `
+  <div class="h1">Instagram DM Center</div>
+  <div class="sub">Ban-safe one-tap queue · ${esc(segLabel())}</div>
+  <div class="banner warn">Instagram has <b>no official API for cold/mass DMs</b> — automation risks a ban. This queue is the safe, effective way: it writes a personalized DM for each lead, you tap to copy &amp; open Instagram, send, and log it.</div>
+  <div class="card">
+    <div class="row" style="align-items:center">
+      <div><div style="font-weight:900;font-size:26px">${num(q.length)}</div><div class="mut" style="font-weight:700">leads with Instagram in this segment</div></div>
+      <div style="flex:none" class="center"><div class="big" style="color:var(--accent2)">${num(done)}</div><div class="mut" style="font-size:11px;font-weight:700">queued done</div></div>
+    </div>
+    ${q.length?"":`<div class="banner info" style="margin:12px 0 0">No leads with an Instagram handle in this segment. Adjust the segment on the Leads tab.</div>`}
+    <button class="btn ghost block" style="margin-top:12px" onclick="navigate('leads')">Change segment →</button>
   </div>
-  <div class="grid cards" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-bottom:14px">
-    ${stat("Queue today",r.queueSize,"⚡","eligible")}
-    ${stat("Sent today",r.sent,"✓","")}
-    ${stat("Failed today",r.failed,"⚠","retry")}
-    ${stat("Queued today",r.queued,"⏳","await SMTP")}
-    ${stat("Left",r.remaining,"◔","never emailed")}
-  </div>
-  <div class="panel">
-    <h3>Today's queue preview <span class="sub">· ${pick.length} business${pick.length===1?"":"es"}, one per company</span></h3>
-    ${pick.length?`<table class="cardify"><thead><tr><th>Business</th><th>To</th><th>Contact</th></tr></thead><tbody>
-      ${pick.slice(0,cap).map(c=>`<tr>
-        <td data-label="Business"><div class="cell-main">${esc(companyName(c.company_id)||"-")}</div></td>
-        <td data-label="To" class="cell-sub">${esc(c.email||"")}</td>
-        <td data-label="Contact" class="cell-sub">${esc(contactName(c))}</td>
-      </tr>`).join("")}</tbody></table>`:emptyBox("All caught up","No eligible businesses today - each has been emailed or needs an email address. Enrich leads from the Campaigns tab.")}
-  </div>`;
+  ${renderDMCard()}`;
 }
-function openDailyQueue(){
-  const pick=dailyQueueEligible();
-  if(!pick.length)return toast("No eligible businesses today","ok");
-  state._dqPick=pick.map(c=>c.id);
-  openModal("⚡ Today's email queue — "+pick.length+" businesses",`
-    <div class="banner ${providerReady()?'info':'warn'}" style="margin-bottom:10px">${providerReady()?'Ready to send via ProtiqAI SMTP.':'Preview mode - this will queue (nothing sends) until ProtiqAI SMTP is connected.'}</div>
-    <div class="field"><label>Subject</label><input id="dq-subj" value="${esc(dqDraft.subject)}"/></div>
-    <div class="field"><label>Message</label><textarea id="dq-body" style="min-height:180px">${esc(dqDraft.body)}</textarea></div>
-    <p class="muted" style="font-size:11.5px;margin:0">Merge fields: <b>{{first_name}}</b>, <b>{{business}}</b>, <b>{{city}}</b>, <b>{{title}}</b>. Unsubscribe link + mailing address are appended automatically. One email per business; unsubscribed / bounced are skipped.</p>
-  `,[{label:"Cancel",cls:"ghost",act:closeModal},{label:"Preview →",cls:"primary",act:dailyQueuePreview}],true);
-}
-function dailyQueuePreview(){
-  dqDraft.subject=$("#dq-subj").value;dqDraft.body=$("#dq-body").value;
-  const ids=state._dqPick||[];if(!ids.length)return;
-  const c=byId(state.data.contacts,ids[0]);
-  const ready=providerReady();
-  openModal("Preview — "+ids.length+" recipients",`
-    <div class="field"><label>Subject</label><div>${esc(mergeClient(dqDraft.subject,c))}</div></div>
-    <div class="field"><label>First recipient</label><div class="cell-sub">${esc(c.email||"")} · ${esc(companyName(c.company_id)||"")}</div></div>
-    <div class="field"><label>Message</label><div class="tb" style="white-space:pre-wrap;max-height:200px;overflow:auto">${esc(mergeClient(dqDraft.body,c))}</div></div>
-    <div class="muted" style="font-size:11px">— ${esc((state.org&&(state.org.from_name||state.org.name))||"CeasAI")}${state.org&&state.org.mailing_address?"<br>"+esc(state.org.mailing_address):'<br><span style="color:var(--amber)">⚠ add a mailing address in Settings (legally required)</span>'}<br>Unsubscribe link appended automatically</div>
-    <div class="banner ${ready?'info':'warn'}" style="margin-top:12px">${ready?('Sends via ProtiqAI SMTP, paced ~1/sec, up to your '+cap()+'/day cap.'):'No provider connected - saved as a <b>queued</b> batch. Nothing is sent until you connect ProtiqAI SMTP in Settings.'}</div>
-  `,[{label:"← Back",cls:"ghost",act:openDailyQueue},{label:ready?("Send to "+ids.length+" →"):("Queue "+ids.length),cls:"primary",act:dailyQueueSend}],true);
-  function cap(){return (state.org&&state.org.daily_cap)||100;}
-}
-async function dailyQueueSend(){
-  const ids=state._dqPick||[];if(!ids.length){toast("No recipients","err");return;}
-  const ready=providerReady();
-  document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=true);
-  try{
-    const name="Daily Queue — "+new Date().toISOString().slice(0,10);
-    const {data:camp,error:ce}=await sb.from("campaigns").insert(withOrg({
-      name,subject:dqDraft.subject,body:dqDraft.body,total:ids.length,
-      status:ready?"queued":"draft",daily_cap:(state.org&&state.org.daily_cap)||100})).select().single();
-    if(ce)throw ce;
-    if(!ready){
-      const rows=ids.map(id=>{const c=byId(state.data.contacts,id);
-        return withOrg({campaign_id:camp.id,contact_id:id,to_email:c.email,subject:mergeClient(dqDraft.subject,c),status:"queued",provider:null,channel:"email",personalization:{first_name:c.first_name,business:companyName(c.company_id),city:c.city||null}});});
-      await sb.from("email_events").insert(rows);
-      toast("Queued "+ids.length+" business"+(ids.length===1?"":"es")+". Connect ProtiqAI SMTP to send.","ok");
-      closeModal();await Promise.all([reload("campaigns"),reload("emailEvents")]);renderNavBadges();render();return;
-    }
-    toast("Sending "+ids.length+"… keep this open","ok");
-    const {data,error}=await sb.functions.invoke("send-campaign",{body:{campaign_id:camp.id,contact_ids:ids,subject:dqDraft.subject,body:dqDraft.body}});
-    if(error)throw error;
-    if(data&&data.reason==="no_provider")toast("SMTP secrets not set server-side — saved as queued","err");
-    else if(data&&data.reason==="no_address")toast("Add a mailing address in Settings first","err");
-    else if(data&&data.reason==="smtp_connect_failed")toast("SMTP connection failed - check host/port. See report.","err");
-    else if(data&&data.ok)toast("Sent "+data.sent+" · failed "+data.failed+" · "+data.skipped_suppressed+" suppressed","ok");
-    else toast((data&&data.message)||"Send failed","err");
-    closeModal();await Promise.all([reload("campaigns"),reload("emailEvents"),reload("contacts")]);renderNavBadges();render();
-  }catch(e){toastErr(e);document.querySelectorAll(".modal-f .btn").forEach(b=>b.disabled=false);}
-}
-
-/* ---- Hunter.io enrichment ---- */
-async function enrichLeads(ids){
-  if(!ids||!ids.length)return;
-  toast("Finding email"+(ids.length>1?"s":"")+" for "+ids.length+" lead"+(ids.length>1?"s":"")+"…");
-  try{
-    const {data,error}=await sb.functions.invoke("enrich-lead",{body:{contact_ids:ids}});
-    if(error)throw error;
-    if(data&&data.reason==="no_provider"){toast("Hunter not connected — deploy enrich-lead + set HUNTER_API_KEY","err");return;}
-    if(!data||!data.ok){toast((data&&data.message)||"Enrichment failed","err");return;}
-    const found=(data.results||[]).filter(r=>r.status==="found").length;
-    await reload("contacts");
-    let q="";if(data.quota&&data.quota.searches_available!=null)q=` · ${Math.max(0,data.quota.searches_available-(data.quota.searches_used||0))} searches left`;
-    toast(`Found ${found}/${ids.length} email${found===1?"":"s"}${q}`,found?"ok":"err");
-    if($("#modal-root").dataset.drawer==="1"&&ids.length===1)renderContactDrawer(ids[0]);else render();
-  }catch(e){toastErr(e);}
-}
-function enrichMissing(){
-  const cands=state.data.contacts.filter(c=>!c.email&&c.company_id&&!c.unsubscribed).map(c=>c.id);
-  if(!cands.length){toast("No leads with a company are missing an email","err");return;}
-  const n=Math.min(cands.length,25);
-  if(!confirm(`Find emails for ${n} lead${n===1?"":"s"} via Hunter?\nThis uses ~${n} Hunter search credit${n===1?"":"s"} (results are cached per domain).`))return;
-  enrichLeads(cands.slice(0,n));
-}
-
-/* ============================================================
-   SETTINGS
-============================================================ */
-function renderSettings(v){
-  const es=egSettings();
-  v.innerHTML=`<div style="max-width:560px">
-    <div class="panel" style="margin-bottom:14px">
-      <h3>✨ Email signature <span class="sub">· used by Generate Email</span></h3>
-      <div class="row"><div class="field"><label>Sender name</label><input id="es-name" value="${esc(es.name)}"/></div>
-        <div class="field"><label>Title / role</label><input id="es-title" value="${esc(es.title)}" placeholder="Founder"/></div></div>
-      <div class="field"><label>Company</label><input id="es-company" value="${esc(es.company)}"/></div>
-      <div class="field"><label>Signature block (optional — overrides the auto sign-off; supports {name}, {title}, {company})</label>
-        <textarea id="es-sig" placeholder="Jane Doe&#10;Founder, CeasAI&#10;(555) 123-4567&#10;ceasai.com">${esc(es.signature)}</textarea></div>
-      <button class="btn primary" onclick="saveEmailSettings()">Save signature</button>
-      <p class="muted" style="font-size:11.5px;margin:10px 0 0">Defaults to your profile name and workspace. Stored on this device.</p>
+function renderDMCard(){
+  const q=state.dm.queue;
+  if(state.dm.idx>=q.length){
+    if(!q.length)return "";
+    return `<div class="card center"><div style="font-size:40px">✅</div><div style="font-weight:800;margin-top:6px">Queue complete</div>
+      <div class="mut">Logged ${num(q.length)} DMs. Nice work.</div>
+      <button class="btn block" style="margin-top:12px" onclick="state.dm.idx=0;state.dm.text='';render()">↺ Restart queue</button></div>`;
+  }
+  const c=state.contacts.find(x=>x.id===q[state.dm.idx]);
+  if(!c)return "";
+  if(!state.dm.text)state.dm.text=genDM(c);
+  const handle=igHandle(c.instagram);
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div><div style="font-weight:800">${esc(c.company||"—")}</div>
+        <div class="mut" style="font-size:12.5px">@${esc(handle)} · ${esc(c.business_type||"")} · ${esc([c.city,c.state].filter(Boolean).join(", "))}</div></div>
+      <div class="mut" style="font-weight:800">${state.dm.idx+1}/${state.dm.queue.length}</div>
     </div>
-    <div class="panel" style="margin-bottom:14px">
-      <h3>📣 Bulk email sending <span class="sub">· ProtiqAI SMTP</span></h3>
-      <div class="banner ${providerReady()?'info':'warn'}" style="margin-bottom:12px">${providerReady()?'✅ Connected — campaigns will send via ProtiqAI SMTP.':'Not connected. Add the fields below, deploy the edge function, and set the SMTP_HOST/PORT/USER/PASS/FROM secrets (see report). Until then, campaigns queue without sending.'}</div>
-      <div class="row"><div class="field"><label>From name</label><input id="s-fromname" value="${esc(state.org&&state.org.from_name||"")}" placeholder="CeasAI"/></div>
-        <div class="field"><label>From email (on your verified domain)</label><input id="s-fromemail" value="${esc(state.org&&state.org.from_email||"")}" placeholder="matt@ceasai.com"/></div></div>
-      <div class="row"><div class="field"><label>Reply-to (optional)</label><input id="s-replyto" value="${esc(state.org&&state.org.reply_to||"")}" placeholder="matt@ceasai.com"/></div>
-        <div class="field"><label>Daily cap</label><input id="s-cap" type="number" min="1" value="${(state.org&&state.org.daily_cap)||100}"/></div></div>
-      <div class="field"><label>Mailing address (required by law — shown in every email)</label><input id="s-address" value="${esc(state.org&&state.org.mailing_address||"")}" placeholder="123 Main St, City, ST 00000"/></div>
-      <div class="field"><label>Provider</label><select id="s-provider">
-        <option value="" ${!(state.org&&state.org.email_provider)?"selected":""}>Not connected (queue only)</option>
-        <option value="smtp" ${state.org&&state.org.email_provider==="smtp"?"selected":""}>ProtiqAI SMTP (edge function deployed + secrets set)</option></select></div>
-      <button class="btn primary" onclick="saveEmailProvider()">Save sending settings</button>
-      <p class="muted" style="font-size:11.5px;margin:10px 0 0">Your SMTP password is <b>never</b> stored here — it lives only as Supabase secrets used by the edge function.</p>
+    <div class="qbox" id="dm-text">${esc(state.dm.text)}</div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" onclick="state.dm.text=genDM(state.contacts.find(x=>x.id==='${c.id}'));render()">🔀 Rewrite</button>
+      <button class="btn primary" onclick="copyOpenIG('${esc(handle)}')">📋 Copy &amp; open IG</button>
     </div>
-    <div class="panel" style="margin-bottom:14px">
-      <h3>🔎 Lead enrichment <span class="sub">· Hunter.io</span></h3>
-      <p class="muted" style="margin-top:0;font-size:12.5px">Finds verified business emails from a lead's company. The Hunter key lives only as a Supabase secret (server-side). Use “Find missing emails” on the Campaigns tab or 🔎 on a lead.</p>
-      <button class="btn" onclick="enrichMissing()">🔎 Find missing emails now</button>
-    </div>
-    <div class="panel" style="margin-bottom:14px">
-      <h3>Workspace</h3>
-      <div class="field"><label>Company / workspace name</label><input id="s-org" value="${esc(state.org?state.org.name:"")}"/></div>
-      <button class="btn primary" onclick="saveOrg()">Save workspace</button>
-    </div>
-    <div class="panel" style="margin-bottom:14px">
-      <h3>Your profile</h3>
-      <div class="field"><label>Full name</label><input id="s-name" value="${esc(state.profile.full_name||"")}"/></div>
-      <div class="field"><label>Email</label><input value="${esc(state.user.email)}" disabled/></div>
-      <button class="btn primary" onclick="saveProfile()">Save profile</button>
-    </div>
-    <div class="panel" style="margin-bottom:14px">
-      <h3>Data</h3>
-      <div style="display:flex;gap:16px;flex-wrap:wrap">
-        ${["contacts","companies","deals","tasks","activities","templates","campaigns","emailEvents"].map(k=>`<div><div class="v" style="font-size:22px;font-weight:800">${state.data[k].length}</div><div class="cell-sub">${k==="emailEvents"?"emails":k}</div></div>`).join("")}
-      </div>
-      <div style="margin-top:14px;display:flex;gap:10px"><button class="btn" onclick="exportCSV()">⇩ Export contacts CSV</button>
-      <button class="btn" onclick="importCSV()">⇪ Import CSV</button></div>
-    </div>
-    <div class="panel">
-      <h3>Session</h3>
-      <p class="muted" style="margin-top:0;font-size:12.5px">Signed in as ${esc(state.user.email)}. Data is protected by row-level security — you only ever see your own workspace.</p>
-      <button class="btn danger" onclick="signOut()">Sign out</button>
+    <div class="row" style="margin-top:9px">
+      <button class="btn ghost" onclick="dmSkip()">Skip</button>
+      <button class="btn good" onclick="dmSent(this,'${c.id}')">✓ Mark sent</button>
     </div>
   </div>`;
 }
-async function saveOrg(){
-  const name=$("#s-org").value.trim();if(!name)return toast("Name required","err");
-  const {error}=await sb.from("orgs").update({name}).eq("id",state.org.id);
-  if(error)return toastErr(error);state.org.name=name;$("#org-name").textContent=name;toast("Workspace saved","ok");
+async function copyOpenIG(handle){
+  try{await navigator.clipboard.writeText(state.dm.text);toast("DM copied","ok");}catch(e){}
+  window.open("https://ig.me/m/"+handle,"_blank");
 }
-async function saveEmailProvider(){
-  const payload={
+function dmSkip(){state.dm.idx++;state.dm.text="";render();}
+async function dmSent(btn,id){
+  btn.disabled=true;
+  try{
+    const c=state.contacts.find(x=>x.id===id);
+    const now=new Date().toISOString();
+    const {error}=await sb.from("email_events").insert({
+      org_id:state.org.id, contact_id:id, channel:"instagram_dm", status:"sent",
+      provider:"instagram", subject:"IG DM", to_email:null, sent_at:now,
+      completed_by:state.user.email, personalization:{business:c&&c.company,text:state.dm.text}
+    });
+    if(error)throw error;
+    await sb.from("contacts").update({last_contacted_at:now}).eq("id",id);
+    state.metrics.dms++;state.dm.idx++;state.dm.text="";
+    toast("Logged IG DM","ok");render();
+  }catch(e){toastErr(e);btn.disabled=false;}
+}
+
+/* ============ SETTINGS ============ */
+function viewSettings(){
+  const o=state.org||{};
+  return `
+  <div class="h1">Settings</div>
+  <div class="sub">Sending identity &amp; compliance</div>
+  <div class="card">
+    <div class="field"><label>From name</label><input id="s-fromname" value="${esc(o.from_name||"CeasAI")}"/></div>
+    <div class="field"><label>From email (your Gmail SMTP sender)</label><input id="s-fromemail" value="${esc(o.from_email||"ceasai.pro@gmail.com")}"/></div>
+    <div class="field"><label>Reply-to (optional)</label><input id="s-replyto" value="${esc(o.reply_to||"")}"/></div>
+    <div class="field"><label>Mailing address (required by law on every email)</label><input id="s-addr" value="${esc(o.mailing_address||"CeasAI — Metro Atlanta, GA 30092")}"/></div>
+    <div class="field"><label>Daily send cap</label><input id="s-cap" type="number" value="${esc(o.daily_cap||100)}"/></div>
+    <button class="btn primary block" onclick="saveSettings(this)">Save settings</button>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">Email engine</div>
+    <div class="mut" style="font-size:13px">Sends run through the Supabase <b>send-campaign</b> edge function using Gmail SMTP. Credentials live only as Supabase secrets — never in this app. The footer + unsubscribe link are appended automatically for CAN-SPAM compliance.</div>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">Data</div>
+    <div class="mut" style="font-size:13px;margin-bottom:10px">${num(state.contacts.length)} leads loaded · ${num(state.contacts.filter(c=>c.source==="mindbody").length)} from Mindbody.</div>
+    <button class="btn block" onclick="navigate('leads')">Manage leads &amp; segments →</button>
+  </div>
+  <button class="btn ghost block" style="border-color:var(--bad);color:var(--bad)" onclick="signOut()">Sign out</button>`;
+}
+async function saveSettings(btn){
+  btn.disabled=true;const o=btn.textContent;btn.textContent="Saving…";
+  const patch={
     from_name:$("#s-fromname").value.trim()||null,
     from_email:$("#s-fromemail").value.trim()||null,
     reply_to:$("#s-replyto").value.trim()||null,
-    mailing_address:$("#s-address").value.trim()||null,
-    daily_cap:Math.max(1,Number($("#s-cap").value||100)),
-    email_provider:$("#s-provider").value||null
+    mailing_address:$("#s-addr").value.trim()||null,
+    daily_cap:parseInt($("#s-cap").value)||100,
+    email_provider:"smtp"
   };
-  const {error}=await sb.from("orgs").update(payload).eq("id",state.org.id);
-  if(error)return toastErr(error);
-  Object.assign(state.org,payload);
-  toast("Sending settings saved","ok");render();
-}
-async function saveProfile(){
-  const full_name=$("#s-name").value.trim();
-  const {error}=await sb.from("profiles").update({full_name}).eq("id",state.user.id);
-  if(error)return toastErr(error);state.profile.full_name=full_name;renderChrome();toast("Profile saved","ok");
-}
-function saveEmailSettings(){
-  const o={name:$("#es-name").value.trim(),title:$("#es-title").value.trim(),
-    company:$("#es-company").value.trim(),signature:$("#es-sig").value};
-  if(egSaveSettings(o))toast("Signature saved","ok");
+  const {error}=await sb.from("orgs").update(patch).eq("id",state.org.id);
+  if(error){toastErr(error);btn.disabled=false;btn.textContent=o;return;}
+  Object.assign(state.org,patch);toast("Saved","ok");btn.disabled=false;btn.textContent=o;
 }
 
-/* ============================================================
-   ✨ EMAIL GENERATOR  (client-side variation engine, no AI key)
-============================================================ */
-const EG_PURPOSES=["Intro","Cold outreach","Follow-up","Re-engagement","Book a call","Proposal","Thank you"];
-const EG_TONES=["Friendly","Professional","Direct","Warm"];
-const EG_TONE={
-  Friendly:{greet:["Hi {first},","Hey {first},","Hi {first} — hope you're having a good week!"],
-            sign:["Cheers,","Thanks so much,","Talk soon,","Appreciate it,"]},
-  Professional:{greet:["Dear {first},","Hello {first},","Hi {first},"],
-            sign:["Best regards,","Kind regards,","Sincerely,","Best,"]},
-  Direct:{greet:["Hi {first},","{first} —","Hey {first},"],
-            sign:["Thanks,","Best,","Appreciate your time,"]},
-  Warm:{greet:["Hi {first},","Hello {first},","Hi {first}, I hope this note finds you well —"],
-            sign:["Warm regards,","All the best,","With appreciation,","Warmly,"]}
-};
-const EG_BENEFITS=["capture and qualify every lead automatically, so none slip through the cracks",
-  "send on-brand follow-ups without ever lifting a finger","let clients book in one line, straight from a DM or your site",
-  "turn missed calls and DMs into booked appointments","run your whole business from one simple app",
-  "reply to every lead in seconds, even when you're with a client","spend less time on admin and more time on the work you love"];
-
-/* Industry-aware personalization for {bizType}, {win}, {industryHook} */
-const EG_INDUSTRY=[
-  {kw:/gym|fitness|trainer|personal train|crossfit|pilates|yoga|bootcamp|strength|coach.*fit|fit.*coach/i,
-   biz:"gym",win:"fill more sessions and keep clients on track between visits",hook:"chasing clients to rebook and reminding them about sessions"},
-  {kw:/salon|barber|hair|spa|nail|lash|brow|beauty|esthet|makeup/i,
-   biz:"salon",win:"keep your chairs full and cut down on no-shows",hook:"juggling DMs, texts and the booking book at once"},
-  {kw:/tutor|teacher|educat|academ|test prep|music lesson|lesson|school|learning/i,
-   biz:"tutoring practice",win:"turn parent inquiries into booked sessions automatically",hook:"replying to every inquiry and scheduling by hand"},
-  {kw:/clean|maid|janitor|housekeep|home service|handyman|hvac|plumb|electric|pest/i,
-   biz:"home-services business",win:"book more jobs and quote leads the moment they reach out",hook:"missing calls while you're out on a job"},
-  {kw:/landscap|lawn|garden|tree|snow|hardscape|irrigation/i,
-   biz:"landscaping business",win:"quote and schedule jobs without the endless phone tag",hook:"leads going cold before you can call them back"},
-  {kw:/photo|videograph|film|content creat|studio.*photo|photograph/i,
-   biz:"photography business",win:"turn inquiries into booked shoots on autopilot",hook:"inquiries piling up across your inbox and DMs"},
-  {kw:/clinic|wellness|health|dental|chiro|therap|med spa|medical|dermatolog|physio|counsel/i,
-   biz:"practice",win:"keep your calendar full and follow up with every patient",hook:"front-desk busywork and missed follow-ups"}
-];
-function egIndustryProfile(text){
-  const t=String(text||"");
-  for(const p of EG_INDUSTRY){if(p.kw.test(t))return p;}
-  return {biz:"business",win:"capture every lead and follow up automatically",hook:"leads slipping through the cracks"};
-}
-const EG_PURPOSE={
-  "Intro":{
-    subjects:["A simpler way to run {company}","{mycompany} × {company}","Quick idea for {company}, {first}","One app to run your {bizType}","Helping {bizType}s like {company} run on autopilot"],
-    open:["I'm {myname} with {mycompany} — we build custom AI apps for {bizType}s like {company}.","Came across {company} and wanted to reach out — I'm {myname} at {mycompany}.","Quick hello from {mycompany}; we build custom agentic AI for small businesses like {company}.","I'm {myname} at {mycompany} — we help {bizType}s {win}."],
-    value:["We build one simple app that captures your leads, follows up automatically, and lets clients book in a single line — so you can {win}.","Think instant lead capture, on-brand follow-ups, and one-line booking, all in one app built around {company}. It helps {bizType}s {win}.","{mycompany} puts your whole business in one app — a ready-made CRM, a booking page, and AI that handles {industryHook} for you."],
-    cta:["Open to a quick 15-minute look this week?","Worth a short call to see if it'd fit {company}?","Want me to send a 2-minute overview?","Mind if I show you what it'd look like for {company}?"]
-  },
-  "Cold outreach":{
-    subjects:["A quick idea for {company}","{first}, worth 15 minutes?","Fewer missed leads at {company}","{mycompany} — quick idea for your {bizType}","Booked out on autopilot, {first}?"],
-    open:["I'll keep this short — I think {mycompany} could genuinely help {company}.","I know a cold email is easy to ignore, so I'll be quick.","We build custom AI for {bizType}s, and {company} came to mind.","Reaching out because I think there's a real opportunity for {company}."],
-    value:["We build one simple app that captures every lead, sends on-brand follow-ups, and books clients in one line — so you can {win}.","In short: {mycompany} builds custom AI that ends {industryHook}. It helps {bizType}s {win}.","Most {bizType}s we work with want to {win} without hiring anyone — that's exactly what our app does."],
-    cta:["Open to a quick look? I can send a short overview.","If it's relevant, would a 10-minute call make sense?","Want me to send a couple of examples for {bizType}s?","Should I share more, or is now not the right time?"]
-  },
-  "Follow-up":{
-    subjects:["Following up, {first}","Re: {mycompany} × {company}","Circling back on {company}","Quick follow-up","Still worth a look, {first}?"],
-    open:["I wanted to follow up on {lastTouch}.","Circling back on my last note in case it slipped by.","Following up to see if you'd had a chance to think it over.","Just floating this back to the top of your inbox."],
-    value:["No pressure at all — I know things get busy. The idea of one app to {win} still stands.","Happy to show how {mycompany} helps {bizType}s {win} whenever the timing's right.","If it's helpful, I can put together a quick demo built around {company}."],
-    cta:["Would this week or next be better for a quick call?","Should I follow up again down the road, or is there interest now?","Want me to send a few times that work?","Is this still on your radar?"]
-  },
-  "Re-engagement":{
-    subjects:["Long time, {first}","Reconnecting — {mycompany}","Picking this back up","Still thinking of {company}","Good time to reconnect?"],
-    open:["It's been a little while since we last connected{sinceLast}.","I know it's been a while — wanted to reopen our conversation.","Reaching back out to reconnect after some time.","Circling back around after a bit of a gap."],
-    value:["We've built a lot since we last talked — our app now handles {industryHook} end to end for {bizType}s.","We've since helped more {bizType}s {win}, and I'd love to catch you up.","If it's still a priority to {win}, {company} may be worth another look."],
-    cta:["Would you be open to picking this back up?","Worth a quick catch-up call?","Should I send over what's new?","Is now a better time than before?"]
-  },
-  "Book a call":{
-    subjects:["15 minutes this week, {first}?","Grabbing time with you","Quick call about {company}?","Let's find 15 minutes","A time to connect"],
-    open:["I'd love to find 15 minutes to talk properly.","Rather than go back and forth, could we grab a quick call?","I think a short call is the fastest way to show how we'd help {company}."],
-    value:["On the call I'll walk you through how our app helps {bizType}s {win} — built around {company}.","It'd be a quick, no-pressure look at what we'd build for {company}.","I'll keep it to 15 minutes and make it worth your time."],
-    cta:["Does Tuesday or Thursday afternoon work?","What does your calendar look like this week?","Happy to work around your schedule — just name a time.","Want me to send a calendar link?"]
-  },
-  "Proposal":{
-    subjects:["Proposal for {company}","As promised — {company} proposal","Next steps for {company}","{company} × {mycompany}: proposal","Your build plan, {first}"],
-    open:["As promised, I've put together a proposal for {company}.","Following our conversation, here's a plan tailored to {company}.","I've outlined exactly what we'd build to help {company} {win}."],
-    value:["It covers the app we'd build — lead capture, automated follow-ups, and one-line booking — plus timeline and pricing.","The goal is simple: {win}, with a custom app and clear milestones along the way.","I've kept it focused on the outcomes that matter most to your {bizType}."],
-    cta:["Happy to walk through it live — when works for you?","Take a look and let me know your thoughts?","Should we set up a time to review it together?","Any questions before we get started?"]
-  },
-  "Thank you":{
-    subjects:["Thank you, {first}","Great talking today","Thanks for your time","Appreciated the conversation","Thank you — next steps"],
-    open:["Thank you for taking the time to talk today.","I really enjoyed our conversation — thank you.","Thanks so much for connecting; it was great to learn how {company} runs."],
-    value:["I'm excited about the possibility of building something that helps {company} {win}.","Based on what we discussed, I'm confident we can end {industryHook} for you.","I'll follow up shortly with the build plan we talked about."],
-    cta:["In the meantime, don't hesitate to reach out with any questions.","I'll be in touch soon — but I'm here if anything comes up.","Looking forward to what's next.","Let me know if there's anything I can send over in the meantime."]
-  }
-};
-
-/* Short, casual Instagram DM copy — pitches CeasAI, personalized, soft CTA */
-const EG_DM={
-  greet:["Hey {first}!","Hi {first} —","{first}, hope you're doing well!","Hey {first} — hope you're good!","Heyy {first} 👋","Hi {first}! 😊","{first}! hope your week's going great","Hey there {first}!"],
-  "Intro":{
-    open:["love what you're doing at {company}.","been checking out {company} — really great stuff.","came across {company} and had to reach out.","{company} caught my eye — genuinely impressed with what you're building.","been following {company} for a bit and love the vibe."],
-    value:["I'm with {mycompany} — we build simple AI apps for {bizType}s that capture leads and follow up + book clients for you automatically.","We help {bizType}s like yours {win} with one simple app (instant lead capture, on-brand follow-ups, one-line booking).","I build custom AI that takes {industryHook} off your plate so you can {win}.","We make one little app that handles {industryHook} for {bizType}s so you can just focus on the work."],
-    cta:["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {company}?","Down to chat this week?","Mind if I share a quick example?","Would love to show you — cool if I DM a demo?"]
-  },
-  "Cold outreach":{
-    open:["quick one — I think I can help {company} book more clients.","I'll be quick! I help {bizType}s stop losing leads.","reaching out because {company} would be a perfect fit for what we build.","promise to keep this short — I think there's a real fit with {company}.","random DM, I know! but I think this could genuinely help {company}."],
-    value:["{mycompany} builds one simple app that captures every lead and follows up + books them automatically.","We help {bizType}s {win} — no more {industryHook}.","It's custom AI that replies to leads in seconds so you can {win}.","one simple app that ends {industryHook} — built around how {company} actually works."],
-    cta:["Want me to send a quick example?","Open to a 2-min look?","Cool if I share more?","Free for a quick call this week?","Worth a quick look? no pressure at all.","Should I send a couple examples for {bizType}s?"]
-  },
-  "Follow-up":{
-    open:["just circling back on my last message!","wanted to bump this in case it got buried.","following up — no worries if now's not the time."],
-    value:["still happy to show how {mycompany} helps {bizType}s {win} with one simple app.","the idea of one app to capture + follow up + book your clients still stands.","I can put together a quick demo built around {company} whenever."],
-    cta:["Want me to send it over?","Still worth a quick look?","Good time to chat this week?","Should I check back later?"]
-  },
-  "Re-engagement":{
-    open:["been a minute! Hope {company} is thriving.","reconnecting after a while — thought of {company}.","circling back around after some time!"],
-    value:["we've built a lot since — our app now handles {industryHook} end to end for {bizType}s.","we've helped more {bizType}s {win} lately and I'd love to catch you up.","might be worth another look if you still want to {win}."],
-    cta:["Open to picking this back up?","Want the quick rundown?","Free for a quick catch-up?","Better timing now?"]
-  },
-  "Book a call":{
-    open:["would love to grab 15 min with you.","think a quick call is the easiest way to show you this.","got a few minutes this week?"],
-    value:["I'll walk you through how our app helps {bizType}s {win}, built around {company}.","quick, no-pressure look at what we'd build for {company}.","15 minutes, promise to make it worth it."],
-    cta:["Tues or Thurs work?","What's your week look like?","Want me to send a link?","Just name a time!"]
-  },
-  "Proposal":{
-    open:["as promised, here's what I'd build for {company}.","putting together a quick plan for {company}!","here's the outline for {company}."],
-    value:["lead capture, auto follow-ups, and one-line booking — one app to {win}.","it's all built to end {industryHook} for your {bizType}.","kept it focused on what matters most to {company}."],
-    cta:["Want to hop on and walk through it?","Take a peek and lmk your thoughts?","Any questions before we start?","Should we pick a time?"]
-  },
-  "Thank you":{
-    open:["thanks so much for chatting today!","really enjoyed the conversation — thank you!","great talking with you about {company}."],
-    value:["excited about building something that helps {company} {win}.","confident we can take {industryHook} off your plate.","I'll send over the plan we talked about shortly."],
-    cta:["Reach out anytime in the meantime!","I'll be in touch soon!","Talk soon 🙌","Here if anything comes up."]
-  }
-};
-let egState={};
-function egPick(a){return a[Math.floor(Math.random()*a.length)];}
-function egPickBut(a,prev){if(!a||!a.length)return "";if(a.length<2)return a[0];let x;let n=0;do{x=egPick(a);n++;}while(x===prev&&n<12);return x;}
-function egMerge(str,ctx){return String(str).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:"")
-  .replace(/ {2,}/g," ").replace(/ ,/g,",").replace(/ \./g,".").replace(/ —,/g," —").trim();}
-function egSettings(){
-  const key="ceasai_email_settings_"+(state.user?state.user.id:"anon");let saved={};
-  try{saved=JSON.parse(localStorage.getItem(key)||"{}");}catch(e){}
-  return {
-    name: saved.name || (state.profile&&state.profile.full_name) || (state.user?state.user.email:"") || "",
-    company: saved.company || (state.org?state.org.name:"") || "",
-    title: saved.title || "",
-    signature: saved.signature || ""
-  };
-}
-function egSaveSettings(o){
-  const key="ceasai_email_settings_"+(state.user?state.user.id:"anon");
-  try{localStorage.setItem(key,JSON.stringify(o));return true;}catch(e){toastErr(e);return false;}
-}
-function egContext(c){
-  const s=egSettings();
-  const acts=state.data.activities.filter(a=>a.contact_id===c.id);
-  const last=acts[0];
-  let lastTouch="my last note",sinceLast="";
-  if(last){const t=last.type==="email"?"email":last.type==="call"?"call":last.type==="meeting"?"conversation":last.type==="dm"||last.type==="instagram_dm"?"DM":(last.type||"note");
-    lastTouch="my last "+t+" "+relTime(last.occurred_at);sinceLast=" — our last "+t+" was "+relTime(last.occurred_at);}
-  const co=byId(state.data.companies,c.company_id);
-  const ind=egIndustryProfile((co&&co.industry)||(c.tags||[]).join(" ")||(c.title||""));
-  return {
-    first:(c.first_name||"there"),
-    company:companyName(c.company_id)||"your business",
-    myname:s.name||"the CeasAI team",
-    mycompany:s.company||"CeasAI",
-    mytitle:s.title||"",
-    myig:"@ceas_ai",
-    source:c.source||"",
-    bizType:ind.biz,
-    win:ind.win,
-    industryHook:ind.hook,
-    benefit:egPick(EG_BENEFITS),
-    lastTouch,sinceLast
-  };
-}
-function egGenerate(){
-  if(egState.channel==="instagram_dm")return egGenerateDM();
-  const c=byId(state.data.contacts,egState.contactId);if(!c)return;
-  const ctx=egContext(c);
-  const P=EG_PURPOSE[egState.purpose]||EG_PURPOSE["Intro"];
-  const T=EG_TONE[egState.tone]||EG_TONE["Friendly"];
-  const L=egState.last||{};
-  const greet=egMerge(egPickBut(T.greet,L.greet),ctx);
-  const open=egMerge(egPickBut(P.open,L.open),ctx);
-  const value=egMerge(egPickBut(P.value,L.value),ctx);
-  const cta=egMerge(egPickBut(P.cta,L.cta),ctx);
-  const sign=egPickBut(T.sign,L.sign);
-  const subjectRaw=egPickBut(P.subjects,L.subject);
-  const subject=egMerge(subjectRaw,ctx);
-  egState.last={greet,open,value,cta,sign,subject:subjectRaw};
-  const s=egSettings();
-  const signName=s.name||ctx.myname;
-  const sig=[sign];
-  if(s.signature&&s.signature.trim()){
-    s.signature.trim().split(/\n/).forEach(l=>sig.push(egMerge(l,{name:signName,company:s.company,title:s.title})));
-  }else{
-    sig.push(signName);
-    const role=[s.title,s.company].filter(Boolean).join(", ");
-    if(role)sig.push(role);
-  }
-  const body=[greet,"",open,"",value,"",cta,"",sig.join("\n")].join("\n");
-  egState.subject=subject;egState.body=body;
-  return {subject,body};
-}
-function egGenerateDM(){
-  const c=byId(state.data.contacts,egState.contactId);if(!c)return;
-  const ctx=egContext(c);
-  const D=EG_DM[egState.purpose]||EG_DM["Intro"];
-  const L=egState.last||{};
-  const greet=egMerge(egPickBut(EG_DM.greet,L.greet),ctx);
-  let open=egMerge(egPickBut(D.open,L.open),ctx);
-  open=open.charAt(0).toUpperCase()+open.slice(1);
-  const value=egMerge(egPickBut(D.value,L.value),ctx);
-  const cta=egMerge(egPickBut(D.cta,L.cta),ctx);
-  egState.last={greet,open,value,cta};
-  // 2–4 short casual sentences, no subject.
-  const body=greet+" "+open+" "+value+" "+cta;
-  egState.subject="";egState.body=body;
-  return {subject:"",body};
-}
-function openEmailGen(contactId,opts){
-  const c=byId(state.data.contacts,contactId);
-  if(!c){toast("Contact not found","err");return;}
-  const queue=(opts&&opts.queue)||null, qpos=(opts&&opts.pos)||0;
-  const purpose=(opts&&opts.purpose)||"Intro", sourceTaskId=(opts&&opts.sourceTaskId)||null;
-  // pre-set a sensible channel from what the contact has on file
-  let channel=(opts&&opts.channel)||"email";
-  if(!opts||!opts.channel){
-    if(!c.email&&c.instagram)channel="instagram_dm";
-    else if(c.email)channel="email";
-    else if(c.instagram)channel="instagram_dm";
-  }
-  egState={contactId,channel,purpose,tone:"Friendly",last:null,queue,qpos,sourceTaskId};
-  egGenerate();
-  const title=(queue?`✨ Outreach ${qpos+1}/${queue.length} — `:"✨ Generate outreach — ")+contactName(c);
-  openModal(title,`<div id="eg-root">${egModalInner()}</div>`,
-    [{label:queue?"Done":"Close",cls:"ghost",act:egCloseGen}],true);
-  egSyncPreview();
-}
-function egCloseGen(){
-  const q=egState.queue, id=egState.contactId;
-  closeModal();
-  if(q)navigate("outreach");
-  else openContact(id);
-}
-function egSkip(){egAdvance();}
-function egAdvance(){
-  const q=egState.queue;if(!q){egCloseGen();return;}
-  const pos=(egState.qpos||0)+1;
-  if(pos<q.length){openEmailGen(q[pos],{queue:q,pos});}
-  else{closeModal();toast("List complete 🎉 nice work","ok");navigate("outreach");}
-}
-function egModalInner(){
-  const isDM=egState.channel==="instagram_dm";
-  return `
-  <div class="field" style="margin-bottom:12px"><label>Channel</label>
-    <div class="eg-chips" id="eg-channel">
-      <span class="eg-chip ${!isDM?"on":""}" onclick="egSetChannel('email')">✉ Email</span>
-      <span class="eg-chip ${isDM?"on":""}" onclick="egSetChannel('instagram_dm')">📷 Instagram DM</span>
-    </div></div>
-  <div class="row" style="gap:16px;flex-wrap:wrap">
-    <div class="field" style="margin-bottom:10px"><label>Purpose</label>
-      <div class="eg-chips" id="eg-purpose">${EG_PURPOSES.map(p=>`<span class="eg-chip ${p===egState.purpose?"on":""}" onclick="egSet('purpose','${p.replace(/'/g,"\\'")}')">${p}</span>`).join("")}</div></div>
-    <div class="field" style="margin-bottom:10px;flex:0 0 auto"><label>Tone</label>
-      <div class="eg-chips" id="eg-tone">${EG_TONES.map(t=>`<span class="eg-chip ${t===egState.tone?"on":""}" onclick="egSet('tone','${t}')">${t}</span>`).join("")}</div></div>
-  </div>
-  <div class="eg-preview">
-    ${isDM?"":`<label>Subject</label>
-    <input id="eg-subject" class="eg-subject" value="${esc(egState.subject)}"/>`}
-    <label ${isDM?"":`style="margin-top:10px"`}>${isDM?"Instagram DM message":"Email body"}</label>
-    <textarea id="eg-body" class="eg-body" ${isDM?`style="min-height:150px"`:""}>${esc(egState.body)}</textarea>
-    <div class="eg-meta" id="eg-meta"></div>
-  </div>
-  <div class="eg-actions">
-    ${isDM
-      ? `<button class="btn primary" onclick="egSendAndLog()">📷 Open IG + log</button>`
-      : `<button class="btn primary" onclick="egSendAndLog()">✉ Send + log</button>`}
-    <button class="btn" onclick="egRegenerate()">↻ Regenerate</button>
-    <button class="btn" onclick="egCopy()">⧉ Copy</button>
-    <button class="btn" onclick="egLogOutreach()">✓ Log only</button>
-    ${egState.queue?`<button class="btn ghost" onclick="egSkip()">Skip →</button>`:""}
-  </div>
-  <p class="muted" style="font-size:11px;margin:8px 0 0">${isDM?"":"“Send + log” opens your mail app pre-filled and copies the email, then logs it & schedules the next follow-up."}</p>`;
-}
-function egRerender(){const r=$("#eg-root");if(r){r.innerHTML=egModalInner();egSyncPreview();}}
-function egSet(kind,val){
-  egState[kind]=val;egState.last=null;
-  egGenerate();egRerender();
-}
-function egSetChannel(val){
-  if(egState.channel===val)return;
-  egState.channel=val;egState.last=null;
-  egGenerate();egRerender();
-}
-function egRegenerate(){egGenerate();egSyncPreview();}
-function egSyncPreview(){
-  const s=$("#eg-subject"),b=$("#eg-body");if(s)s.value=egState.subject;if(b)b.value=egState.body;
-  const c=byId(state.data.contacts,egState.contactId),m=$("#eg-meta");
-  if(m&&c){const bits=[];if(c.first_name)bits.push(c.first_name);const cn=companyName(c.company_id);if(cn)bits.push(cn);
-    if(c.title)bits.push(c.title);if(c.status)bits.push(c.status);if(c.source)bits.push("source: "+c.source);
-    if((c.tags||[]).length)bits.push("tags: "+c.tags.join(", "));
-    let msg="✨ Personalized with "+(bits.join(" · ")||"contact details");
-    if(egState.channel==="instagram_dm"){msg+=c.instagram?" · DM to @"+igHandle(c.instagram):" · ⚠ no Instagram handle on file";}
-    m.textContent=msg;}
-}
-function egCurrent(){return {subject:($("#eg-subject")?$("#eg-subject").value:egState.subject),body:($("#eg-body")?$("#eg-body").value:egState.body)};}
-function egCopy(){
-  const isDM=egState.channel==="instagram_dm";
-  const {subject,body}=egCurrent();
-  const text=isDM?body:("Subject: "+subject+"\n\n"+body);
-  const done=()=>toast(isDM?"DM copied to clipboard":"Email copied to clipboard","ok");
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>egCopyFallback(text,done));}
-  else egCopyFallback(text,done);
-}
-function egOpenInstagram(){
-  const c=byId(state.data.contacts,egState.contactId);
-  const h=igHandle(c&&c.instagram);
-  if(!h){toast("Add an Instagram handle to this contact first","err");return;}
-  window.open("https://instagram.com/"+encodeURIComponent(h),"_blank","noopener");
-}
-function egCopyFallback(text,done){
-  const ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
-  document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand("copy");done();}catch(e){toastErr(e);}ta.remove();
-}
-function egMailto(){
-  const c=byId(state.data.contacts,egState.contactId);const {subject,body}=egCurrent();
-  if(!c||!c.email){toast("This contact has no email address","err");return;}
-  window.location.href="mailto:"+encodeURIComponent(c.email)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
-}
-function egSendAndLog(){
-  const isDM=egState.channel==="instagram_dm";
-  if(isDM){egCopy();egOpenInstagram();}
-  else{egCopy();egMailto();}
-  setTimeout(()=>egLogOutreach(),300);
-}
-async function egLogOutreach(){
-  const c=byId(state.data.contacts,egState.contactId);if(!c)return;
-  const isDM=egState.channel==="instagram_dm";
-  const {subject,body}=egCurrent();
-  const nextFollow=addDays(egState.purpose==="Follow-up"?5:3);
-  document.querySelectorAll(".eg-actions .btn").forEach(b=>b.disabled=true);
-  try{
-    const {error}=await sb.from("activities").insert(withOrg({contact_id:c.id,
-      type:isDM?"dm":"email",channel:isDM?"instagram_dm":"email",direction:"outbound",
-      subject:isDM?"Instagram DM":(subject||null),body:body||null,occurred_at:new Date().toISOString()}));
-    if(error)throw error;
-    if(egState.sourceTaskId){await sb.from("tasks").update({done:true,updated_at:new Date().toISOString()}).eq("id",egState.sourceTaskId);}
-    await sb.from("tasks").insert(withOrg({title:(egState.purpose==="Follow-up"?"Follow up again: ":"Follow up: ")+contactName(c),type:"follow-up",due_date:nextFollow,contact_id:c.id}));
-    const upd={last_contacted_at:new Date().toISOString(),next_followup_at:nextFollow,updated_at:new Date().toISOString()};
-    if(c.status==="New")upd.status="Contacted";
-    await sb.from("contacts").update(upd).eq("id",c.id);
-    toast(isDM?"DM logged ✓ next follow-up set":"Logged ✓ next follow-up scheduled","ok");
-    await Promise.all([reload("activities"),reload("tasks"),reload("contacts")]);
-    renderNavBadges();
-    if(egState.queue){egAdvance();}
-    else{openContact(c.id);if(state.view!=="contacts")render();}
-  }catch(e){toastErr(e);document.querySelectorAll(".eg-actions .btn").forEach(b=>b.disabled=false);}
-}
-/* One-tap follow-up: open the generator preset to Follow-up for this lead. */
-function sendFollowup(contactId,taskId){
-  const c=byId(state.data.contacts,contactId);
-  if(!c){toast("Lead not found","err");return;}
-  openEmailGen(contactId,{purpose:"Follow-up",sourceTaskId:taskId||null,channel:c.email?"email":(c.instagram?"instagram_dm":"email")});
-}
-
-/* ============================================================
-   MODAL / DRAWER
-============================================================ */
-function openModal(title,bodyHTML,actions,wide){
-  const acts=(actions||[]).filter(Boolean);
-  const root=$("#modal-root");root.dataset.drawer="";
-  root.innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()">
-    <div class="modal ${wide?"wide":""}">
-      <div class="modal-h"><h3>${esc(title)}</h3><span class="x" onclick="closeModal()">×</span></div>
-      <div class="modal-b">${bodyHTML}</div>
-      ${acts.length?`<div class="modal-f">${acts.map((a,i)=>`<button class="btn ${a.cls||""}" data-act="${i}">${esc(a.label)}</button>`).join("")}</div>`:""}
-    </div></div>`;
-  const first=root.querySelector("input:not([type=checkbox]),textarea,select");if(first)setTimeout(()=>first.focus(),40);
-}
-function openDrawer(title,bodyHTML){
-  const root=$("#modal-root");root.dataset.drawer="1";
-  root.innerHTML=`<div class="overlay drawer-ov" onclick="if(event.target===this)closeDrawer()" style="padding:0;justify-content:flex-end;align-items:stretch">
-    <div class="modal" style="max-width:560px;border-radius:0;min-height:100dvh;align-self:stretch;display:flex;flex-direction:column">
-      <div class="modal-h"><h3>${esc(title)}</h3><span class="x" onclick="closeDrawer()">×</span></div>
-      <div class="modal-b" style="overflow:auto">${bodyHTML}</div>
-    </div></div>`;
-}
-function closeModal(){const r=$("#modal-root");if(r.dataset.drawer==="1")return;r.innerHTML="";}
-function closeDrawer(){$("#modal-root").innerHTML="";$("#modal-root").dataset.drawer="";}
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){if($("#modal-root").dataset.drawer==="1")closeDrawer();else closeModal();}});
-
-/* ============================================================
-   START
-============================================================ */
-sb.auth.onAuthStateChange((event)=>{ if(event==="SIGNED_OUT"){location.reload();} });
-setAuthMode("login");
+/* ============ START ============ */
 boot();
 </script>
 </body>

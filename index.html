@@ -90,8 +90,7 @@ label{display:block;font-size:12.5px;color:var(--mut);margin:0 0 6px 2px;font-we
 @media(min-width:640px){.modal{align-items:center}.modal .sheet{border-radius:20px}}
 .spin{display:inline-block;width:16px;height:16px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-</style>
-</head>
+</style></head>
 <body>
 
 <!-- ============ AUTH ============ -->
@@ -121,7 +120,6 @@ label{display:block;font-size:12.5px;color:var(--mut);margin:0 0 6px 2px;font-we
   <div id="view" class="wrap"></div>
   <div class="nav" id="nav"></div>
 </div>
-
 <script>
 /* ============ CONFIG ============ */
 const SUPABASE_URL = "https://dxctcajmleurhwhbnqyj.supabase.co";
@@ -129,11 +127,13 @@ const SUPABASE_ANON_KEY = "sb_publishable__u2lblfYFekZgYJknH3PtQ_J20vGVF9";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const BIZ_TYPES = ["Gym","CrossFit","MMA / Boxing","Yoga / Pilates","Personal Training","Boutique Studio","Wellness / Spa","Other"];
+// Template B — "quick question" single-question email. {{title}} = business name
+// (the send-campaign edge fn merges c.title), {{city}} = the lead's city.
 const TEMPLATE_B = {
-  subject: "quick question about {{business}}",
+  subject: "quick question about {{title}}",
   body: `Hi there,
 
-Quick question — is {{business}} currently doing anything to automatically follow up with new leads and website inquiries?
+Quick question — is {{title}} currently doing anything to automatically follow up with new leads and website inquiries?
 
 I build simple AI tools for {{city}} fitness & wellness businesses that capture every inquiry and reply (and book them) in seconds — so you stop losing prospects to slow follow-up.
 
@@ -147,8 +147,7 @@ const state = {
   contacts:[],
   metrics:{emails:0, dms:0, responses:0, inbound:0},
   segment:{type:"", state:"", hasEmail:false, warm:false},
-  dm:{queue:[], idx:0, text:""},
-  busy:false,
+  dm:{queue:[], idx:0, text:"", _sig:""},
 };
 
 /* ============ HELPERS ============ */
@@ -157,16 +156,25 @@ const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">"
 function toast(m,cls=""){let t=document.createElement("div");t.className="toast "+cls;t.textContent=m;
   document.body.appendChild(t);setTimeout(()=>t.remove(),2600);}
 function toastErr(e){toast((e&&e.message)||String(e),"err");}
-function igHandle(v){return String(v||"").trim().replace(/^@+/,"").replace(/^https?:\/\/(www\.)?instagram\.com\//i,"").replace(/[/?#].*$/,"");}
 function num(n){return (n||0).toLocaleString();}
-function isInbound(c){return String(c&&c.source||"").indexOf("IG keyword")===0;}
 function pick(a){return a[Math.floor(Math.random()*a.length)];}
 function lsKey(k){return "ceasai_"+k+"_"+(state.user?state.user.id:"anon");}
+function igClean(v){return String(v||"").trim().replace(/^@+/,"").replace(/^https?:\/\/(www\.)?instagram\.com\//i,"").replace(/[/?#].*$/,"");}
+// Structured fields are encoded as prefixed tags so NO schema change is needed:
+//   biz:<Type>  st:<ST>  ig:<handle>   (business name lives in contacts.title)
+function tagVal(c,pre){const t=(c.tags||[]).find(x=>String(x).indexOf(pre)===0);return t?t.slice(pre.length):"";}
+function bizType(c){return tagVal(c,"biz:")||"Other";}
+function stOf(c){return (tagVal(c,"st:")||"").toUpperCase();}
+function igOf(c){return igClean(tagVal(c,"ig:")||c.instagram||"");}
+function dispName(c){return c.title||((c.first_name||"")+" "+(c.last_name||"")).trim()||"—";}
+function isInbound(c){return String(c&&c.source||"").indexOf("IG keyword")===0;}
+function hasEmail(c){return !!(c.email&&c.email.includes("@"));}
 function tplGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("tplB")));if(v&&v.subject)return v;}catch(e){}return {...TEMPLATE_B};}
 function tplSet(o){try{localStorage.setItem(lsKey("tplB"),JSON.stringify(o));}catch(e){}}
+function respGet(){try{return parseInt(localStorage.getItem(lsKey("responses")))||0;}catch(e){return 0;}}
+function respSet(n){try{localStorage.setItem(lsKey("responses"),String(Math.max(0,n)));}catch(e){}}
 
 /* ============ AUTH ============ */
-let authMode="login";
 async function doAuth(ev){
   ev.preventDefault();
   const email=$("#a-email").value.trim(), pass=$("#a-pass").value;
@@ -202,17 +210,20 @@ async function boot(){
   navigate(state.view);
 }
 async function loadAll(){
-  const {data:c}=await sb.from("contacts").select("*").order("company",{ascending:true}).limit(5000);
+  const {data:c,error}=await sb.from("contacts").select("*").order("updated_at",{ascending:false}).limit(6000);
+  if(error)toastErr(error);
   state.contacts=c||[];
   state.metrics.inbound=state.contacts.filter(isInbound).length;
   await loadMetrics();
 }
 async function loadMetrics(){
-  const em = await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");
-  const dm = await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","instagram_dm").eq("status","sent");
-  state.metrics.emails = em.count||0;
-  state.metrics.dms = dm.count||0;
-  state.metrics.responses = (state.org && state.org.responses_count)||0;
+  try{
+    const em=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");
+    const dm=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","instagram_dm").eq("status","sent");
+    state.metrics.emails=em.count||0;
+    state.metrics.dms=dm.count||0;
+  }catch(e){}
+  state.metrics.responses=respGet();
 }
 
 /* ============ NAV ============ */
@@ -237,25 +248,29 @@ function render(){
   else if(state.view==="settings")v.innerHTML=viewSettings();
 }
 
-/* ============ SEGMENT LOGIC ============ */
+/* ============ SEGMENT ============ */
 function segFilter(list){
   const s=state.segment;
   return list.filter(c=>{
-    if(s.type && c.business_type!==s.type)return false;
-    if(s.state && (c.state||"").toUpperCase()!==s.state.toUpperCase())return false;
-    if(s.hasEmail && !(c.email&&c.email.includes("@")))return false;
+    if(s.type && bizType(c)!==s.type)return false;
+    if(s.state && stOf(c)!==s.state.toUpperCase())return false;
+    if(s.hasEmail && !hasEmail(c))return false;
     if(s.warm && !isInbound(c))return false;
     return true;
   });
 }
-function emailable(list){return list.filter(c=>c.email&&c.email.includes("@")&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");}
-function withIG(list){return list.filter(c=>c.instagram && igHandle(c.instagram));}
+function emailable(list){return list.filter(c=>hasEmail(c)&&!c.unsubscribed&&c.email_status!=="bounced"&&c.email_status!=="invalid");}
+function withIG(list){return list.filter(c=>igOf(c));}
 function segLabel(){
   const s=state.segment;const p=[];
-  p.push(s.type||"All types"); if(s.state)p.push(s.state.toUpperCase()); if(s.hasEmail)p.push("has email");
+  if(s.warm)p.push("Warm inbound"); p.push(s.type||"All types");
+  if(s.state)p.push(s.state.toUpperCase()); if(s.hasEmail)p.push("has email");
   return p.join(" · ");
 }
-function statesList(){return [...new Set(state.contacts.map(c=>(c.state||"").toUpperCase()).filter(Boolean))].sort();}
+function statesList(){return [...new Set(state.contacts.map(stOf).filter(Boolean))].sort();}
+function setSeg(k,v){state.segment[k]=v;render();}
+function toggleSeg(k){state.segment[k]=!state.segment[k];render();}
+function viewWarm(){state.segment={type:"",state:"",hasEmail:false,warm:true};navigate("leads");}
 
 /* ============ DASHBOARD ============ */
 function viewDashboard(){
@@ -263,7 +278,7 @@ function viewDashboard(){
   const total=state.contacts.length;
   const byType={};BIZ_TYPES.forEach(t=>byType[t]=0);
   let emCount=0;
-  state.contacts.forEach(c=>{const t=c.business_type||"Other";byType[t]=(byType[t]||0)+1;if(c.email&&c.email.includes("@"))emCount++;});
+  state.contacts.forEach(c=>{const t=bizType(c);byType[t]=(byType[t]||0)+1;if(hasEmail(c))emCount++;});
   const maxT=Math.max(1,...Object.values(byType));
   const brk=BIZ_TYPES.filter(t=>byType[t]>0).map(t=>`
     <div class="brk"><div class="nm">${esc(t)}</div>
@@ -286,9 +301,7 @@ function viewDashboard(){
   <div class="card" style="margin-top:14px">
     <div class="row" style="align-items:center">
       <div><div class="big" style="color:var(--txt)">${num(total)}</div><div class="mut" style="font-weight:700">Total leads &nbsp;·&nbsp; ${num(emCount)} emailable</div></div>
-      <div style="flex:none">
-        <button class="btn" onclick="navigate('leads')">Build segment →</button>
-      </div>
+      <div style="flex:none"><button class="btn" onclick="navigate('leads')">Build segment →</button></div>
     </div>
   </div>
   <div class="card">
@@ -306,21 +319,14 @@ function viewDashboard(){
     </div>
   </div>`;
 }
-function viewWarm(){state.segment={type:"",state:"",hasEmail:false,warm:true};navigate("leads");}
-async function bumpResponses(d){
-  const cur=(state.org&&state.org.responses_count)||0;
-  const next=Math.max(0,cur+d);
-  const {error}=await sb.from("orgs").update({responses_count:next}).eq("id",state.org.id);
-  if(error){toastErr(error);return;}
-  state.org.responses_count=next;state.metrics.responses=next;render();
-}
+function bumpResponses(d){const n=Math.max(0,respGet()+d);respSet(n);state.metrics.responses=n;render();}
 
 /* ============ LEADS / SEGMENTS ============ */
 function viewLeads(){
   const imported=state.contacts.some(c=>c.source==="mindbody");
   const seg=segFilter(state.contacts);
   const em=emailable(seg);const ig=withIG(seg);
-  const typeChips=["",...BIZ_TYPES].map(t=>`<span class="chip ${state.segment.type===t?'on':''}" onclick="setSeg('type','${esc(t).replace(/'/g,"\\'")}')">${t?esc(t):"All types"}</span>`).join(" ");
+  const typeChips=["",...BIZ_TYPES].map(t=>`<span class="chip ${state.segment.type===t?'on':''}" onclick="setSeg('type',this.dataset.t)" data-t="${esc(t)}">${t?esc(t):"All types"}</span>`).join(" ");
   const stateOpts=`<option value="">All states</option>`+statesList().map(s=>`<option value="${s}" ${state.segment.state===s?'selected':''}>${s}</option>`).join("");
   const preview=seg.slice(0,40).map(c=>leadCard(c)).join("")||`<div class="mut">No leads match this segment.</div>`;
   return `
@@ -355,17 +361,15 @@ function viewLeads(){
 function leadCard(c){
   const tags=[];
   if(isInbound(c))tags.push('<span class="tag" style="color:var(--good)">🔥 warm inbound</span>');
-  if(c.email&&c.email.includes("@"))tags.push('<span class="tag em">✉ email</span>');
-  if(c.instagram&&igHandle(c.instagram))tags.push('<span class="tag ig">📷 @'+esc(igHandle(c.instagram))+'</span>');
-  if(c.business_type)tags.push('<span class="tag">'+esc(c.business_type)+'</span>');
+  if(hasEmail(c))tags.push('<span class="tag em">✉ email</span>');
+  const ig=igOf(c);if(ig)tags.push('<span class="tag ig">📷 @'+esc(ig)+'</span>');
+  tags.push('<span class="tag">'+esc(bizType(c))+'</span>');
   return `<div class="lead">
-    <div class="nm">${esc(c.company||((c.first_name||"")+" "+(c.last_name||"")).trim()||"—")}</div>
-    <div class="meta">${esc([c.city,c.state].filter(Boolean).join(", "))||"—"}</div>
+    <div class="nm">${esc(dispName(c))}</div>
+    <div class="meta">${esc([c.city,stOf(c)].filter(Boolean).join(", "))||"—"}</div>
     <div>${tags.join("")}</div>
   </div>`;
 }
-function setSeg(k,v){state.segment[k]=v;render();}
-function toggleSeg(k){state.segment[k]=!state.segment[k];render();}
 
 async function importLeads(btn){
   if(!state.org){toast("Org not ready","err");return;}
@@ -374,20 +378,22 @@ async function importLeads(btn){
   try{
     const res=await fetch("leads-seed.json",{cache:"no-store"});
     const seed=await res.json();
-    const org_id=state.org.id;
-    let done=0;
+    const org_id=state.org.id;let done=0;
     for(let i=0;i<seed.length;i+=200){
-      const batch=seed.slice(i,i+200).map(s=>({
-        org_id, first_name:"", last_name:"",
-        company:s.company||null, email:s.email||null, city:s.city||null, state:s.state||null,
-        instagram:s.instagram||null, website:s.website||null,
-        business_type:s.business_type||"Other", tags:s.tags||[],
-        source:"mindbody", status:"New"
-      }));
+      const batch=seed.slice(i,i+200).map(s=>{
+        const tags=["biz:"+(s.business_type||"Other")];
+        if(s.state)tags.push("st:"+String(s.state).toUpperCase());
+        if(s.instagram)tags.push("ig:"+igClean(s.instagram));
+        return {
+          org_id, first_name:"", last_name:"",
+          title:s.company||null, email:s.email||null, city:s.city||null,
+          tags, source:"mindbody", status:"New",
+          notes:s.website?("web: "+s.website):null
+        };
+      });
       const {error}=await sb.from("contacts").insert(batch);
       if(error)throw error;
-      done+=batch.length;
-      btn.innerHTML='<span class="spin"></span> '+done+" / "+seed.length;
+      done+=batch.length;btn.innerHTML='<span class="spin"></span> '+done+" / "+seed.length;
     }
     toast("Imported "+done+" leads","ok");
     await loadAll();render();
@@ -400,7 +406,7 @@ function viewEmail(){
   const seg=segFilter(state.contacts);
   const send=emailable(seg);
   const org=state.org||{};
-  const ready=!!org.mailing_address && !!(org.from_email);
+  const ready=!!org.mailing_address && !!org.from_email;
   const sample=send[0]||seg[0]||null;
   return `
   <div class="h1">Mass Email</div>
@@ -418,34 +424,34 @@ function viewEmail(){
   ${ready?"":`<div class="banner warn">⚠ Set your From email + mailing address in <b>Settings</b> before sending (legally required).</div>`}
   <div class="card">
     <div class="field"><label>Subject</label><input id="e-subj" value="${esc(tpl.subject)}" oninput="saveTpl()"/></div>
-    <div class="field" style="margin-bottom:6px"><label>Body — {{business}} and {{city}} auto-fill per lead</label>
+    <div class="field" style="margin-bottom:6px"><label>Body — {{title}} (business name) &amp; {{city}} auto-fill per lead</label>
       <textarea id="e-body" oninput="saveTpl()">${esc(tpl.body)}</textarea></div>
     <div class="mut" style="font-size:12px">A footer with your name, address and an unsubscribe link is added automatically to every email.</div>
     <button class="btn ghost" style="margin-top:8px" onclick="resetTpl()">↺ Reset to Template B</button>
   </div>
   ${sample?`<div class="card">
-    <div style="font-weight:800;margin-bottom:8px">Preview <span class="mut" style="font-weight:600">— ${esc(sample.company||"lead")}</span></div>
+    <div style="font-weight:800;margin-bottom:8px">Preview <span class="mut" style="font-weight:600">— ${esc(dispName(sample))}</span></div>
     <div class="qbox"><b>${esc(mergeMail(tpl.subject,sample))}</b>\n\n${esc(mergeMail(tpl.body,sample))}</div>
   </div>`:""}
   <button class="btn primary block lg" ${send.length&&ready?"":"disabled"} onclick="confirmSend()">
     🚀 Send to all ${num(send.length)}
   </button>
-  <div class="mut center" style="font-size:12px;margin-top:8px">Paced sending · ${num((org.daily_cap||100))}/day cap · one email per business</div>`;
+  <div class="mut center" style="font-size:12px;margin-top:8px">Paced sending · ${num(org.daily_cap||100)}/day cap · one email per business</div>`;
 }
 function mergeMail(t,c){
-  const map={business:c.company||"your business",company:c.company||"your business",
+  const map={title:dispName(c),business:dispName(c),company:dispName(c),
     city:c.city||"your area",first_name:c.first_name||"there",first:c.first_name||"there"};
   return String(t||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);
 }
 function saveTpl(){tplSet({subject:$("#e-subj").value,body:$("#e-body").value});}
 function resetTpl(){tplSet({...TEMPLATE_B});render();}
 function confirmSend(){
-  const seg=segFilter(state.contacts);const send=emailable(seg);
+  const send=emailable(segFilter(state.contacts));
   if(!send.length)return;
   const sheet=`<div class="modal" onclick="if(event.target===this)this.remove()"><div class="sheet">
     <div class="h1">Send to ${num(send.length)} businesses?</div>
     <div class="sub">${esc(segLabel())} · through your Gmail SMTP engine</div>
-    <div class="banner info">Emails are personalized, paced, capped at ${num((state.org.daily_cap||100))}/day, and every send is logged. Unsubscribed leads are skipped.</div>
+    <div class="banner info">Emails are personalized, paced, capped at ${num((state.org&&state.org.daily_cap)||100)}/day, and every send is logged. Unsubscribed leads are skipped.</div>
     <button class="btn primary block lg" onclick="doSend(this)">Yes — send now</button>
     <button class="btn ghost block" style="margin-top:8px" onclick="this.closest('.modal').remove()">Cancel</button>
   </div></div>`;
@@ -454,16 +460,19 @@ function confirmSend(){
 async function doSend(btn){
   btn.disabled=true;btn.innerHTML='<span class="spin"></span> Sending…';
   const tpl=tplGet();
-  const seg=segFilter(state.contacts);const send=emailable(seg);
+  const send=emailable(segFilter(state.contacts));
   const ids=send.map(c=>c.id);
   try{
-    const {data:camp,error:ce}=await sb.from("campaigns").insert({
-      org_id:state.org.id, name:"Mass email — "+segLabel(), subject:tpl.subject, body:tpl.body,
-      status:"queued", total:ids.length, daily_cap:(state.org.daily_cap||100)
-    }).select().maybeSingle();
-    if(ce)throw ce;
+    let campId=null;
+    try{
+      const {data:camp}=await sb.from("campaigns").insert({
+        org_id:state.org.id, name:"Mass email — "+segLabel(), subject:tpl.subject, body:tpl.body,
+        status:"queued", total:ids.length, daily_cap:(state.org.daily_cap||100)
+      }).select().maybeSingle();
+      campId=camp?camp.id:null;
+    }catch(e){}
     const {data,error}=await sb.functions.invoke("send-campaign",{body:{
-      campaign_id:camp?camp.id:null, contact_ids:ids, subject:tpl.subject, body:tpl.body
+      campaign_id:campId, contact_ids:ids, subject:tpl.subject, body:tpl.body
     }});
     if(error)throw error;
     const modal=btn.closest(".modal");if(modal)modal.remove();
@@ -484,25 +493,23 @@ const DM_VALUE=["I build simple AI tools for {type}s that capture every lead and
 const DM_CTA=["Cool if I send a quick example?","Open to a 2-min look?","Want me to show what it could do for {biz}?","Mind if I share a quick example?","Worth a quick look? no pressure."];
 function typeWord(t){return ({"Gym":"gym","CrossFit":"CrossFit box","MMA / Boxing":"gym","Yoga / Pilates":"studio","Personal Training":"training studio","Boutique Studio":"studio","Wellness / Spa":"wellness business","Other":"business"})[t]||"business";}
 function genDM(c){
-  const ctx={first:(c.first_name||"there"),biz:c.company||"your studio",city:c.city||"your area",type:typeWord(c.business_type)};
-  const parts=[pick(DM_GREET),pick(DM_OPEN),pick(DM_VALUE),pick(DM_CTA)];
-  return parts.map(p=>String(p).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:m)).join(" ")
-    .replace(/\s{2,}/g," ").trim();
+  const ctx={first:(c.first_name||"there"),biz:dispName(c)==="—"?"your studio":dispName(c),city:c.city||"your area",type:typeWord(bizType(c))};
+  return [pick(DM_GREET),pick(DM_OPEN),pick(DM_VALUE),pick(DM_CTA)]
+    .map(p=>String(p).replace(/\{(\w+)\}/g,(m,k)=>ctx[k]!=null?ctx[k]:m)).join(" ").replace(/\s{2,}/g," ").trim();
 }
 function viewDM(){
   const seg=withIG(segFilter(state.contacts));
-  if(!state.dm.queue.length || state.dm._segSig!==segLabel()){
-    state.dm.queue=seg.map(c=>c.id);state.dm.idx=0;state.dm._segSig=segLabel();state.dm.text="";
-  }
-  const q=state.dm.queue;const done=state.dm.idx;
+  const sig=segLabel();
+  if(state.dm._sig!==sig){state.dm.queue=seg.map(c=>c.id);state.dm.idx=0;state.dm._sig=sig;state.dm.text="";}
+  const q=state.dm.queue;
   return `
   <div class="h1">Instagram DM Center</div>
-  <div class="sub">Ban-safe one-tap queue · ${esc(segLabel())}</div>
+  <div class="sub">Ban-safe one-tap queue · ${esc(sig)}</div>
   <div class="banner warn">Instagram has <b>no official API for cold/mass DMs</b> — automation risks a ban. This queue is the safe, effective way: it writes a personalized DM for each lead, you tap to copy &amp; open Instagram, send, and log it.</div>
   <div class="card">
     <div class="row" style="align-items:center">
       <div><div style="font-weight:900;font-size:26px">${num(q.length)}</div><div class="mut" style="font-weight:700">leads with Instagram in this segment</div></div>
-      <div style="flex:none" class="center"><div class="big" style="color:var(--accent2)">${num(done)}</div><div class="mut" style="font-size:11px;font-weight:700">queued done</div></div>
+      <div style="flex:none" class="center"><div class="big" style="color:var(--accent2)">${num(state.dm.idx)}</div><div class="mut" style="font-size:11px;font-weight:700">done</div></div>
     </div>
     ${q.length?"":`<div class="banner info" style="margin:12px 0 0">No leads with an Instagram handle in this segment. Adjust the segment on the Leads tab.</div>`}
     <button class="btn ghost block" style="margin-top:12px" onclick="navigate('leads')">Change segment →</button>
@@ -520,12 +527,12 @@ function renderDMCard(){
   const c=state.contacts.find(x=>x.id===q[state.dm.idx]);
   if(!c)return "";
   if(!state.dm.text)state.dm.text=genDM(c);
-  const handle=igHandle(c.instagram);
+  const handle=igOf(c);
   return `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div><div style="font-weight:800">${esc(c.company||"—")}</div>
-        <div class="mut" style="font-size:12.5px">@${esc(handle)} · ${esc(c.business_type||"")} · ${esc([c.city,c.state].filter(Boolean).join(", "))}</div></div>
-      <div class="mut" style="font-weight:800">${state.dm.idx+1}/${state.dm.queue.length}</div>
+      <div><div style="font-weight:800">${esc(dispName(c))}</div>
+        <div class="mut" style="font-size:12.5px">@${esc(handle)} · ${esc(bizType(c))} · ${esc([c.city,stOf(c)].filter(Boolean).join(", "))}</div></div>
+      <div class="mut" style="font-weight:800">${state.dm.idx+1}/${q.length}</div>
     </div>
     <div class="qbox" id="dm-text">${esc(state.dm.text)}</div>
     <div class="row" style="margin-top:10px">
@@ -551,7 +558,7 @@ async function dmSent(btn,id){
     const {error}=await sb.from("email_events").insert({
       org_id:state.org.id, contact_id:id, channel:"instagram_dm", status:"sent",
       provider:"instagram", subject:"IG DM", to_email:null, sent_at:now,
-      completed_by:state.user.email, personalization:{business:c&&c.company,text:state.dm.text}
+      completed_by:state.user.email, personalization:{business:c&&dispName(c),text:state.dm.text}
     });
     if(error)throw error;
     await sb.from("contacts").update({last_contacted_at:now}).eq("id",id);
@@ -580,7 +587,7 @@ function viewSettings(){
   </div>
   <div class="card">
     <div style="font-weight:800;margin-bottom:6px">Data</div>
-    <div class="mut" style="font-size:13px;margin-bottom:10px">${num(state.contacts.length)} leads loaded · ${num(state.contacts.filter(c=>c.source==="mindbody").length)} from Mindbody.</div>
+    <div class="mut" style="font-size:13px;margin-bottom:10px">${num(state.contacts.length)} leads loaded · ${num(state.contacts.filter(c=>c.source==="mindbody").length)} from Mindbody · ${num(state.metrics.inbound)} warm inbound.</div>
     <button class="btn block" onclick="navigate('leads')">Manage leads &amp; segments →</button>
   </div>
   <button class="btn ghost block" style="border-color:var(--bad);color:var(--bad)" onclick="signOut()">Sign out</button>`;

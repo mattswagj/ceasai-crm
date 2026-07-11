@@ -2,21 +2,24 @@
 // Receives inbound Instagram keyword leads from ManyChat's "External Request"
 // action and drops them into the CRM as WARM inbound leads.
 //
-// This is the compliant inbound play: a person comments/DMs a keyword on IG,
-// ManyChat auto-replies, and posts the lead here. These are warmer and higher
-// priority than cold outreach, so they land with status = 'Replied'.
+// Compliant inbound play: someone comments/DMs a keyword on IG, ManyChat
+// auto-replies, and posts the lead here. Warmer than cold outreach, so it
+// lands with status = 'Replied'.
 //
-// Deploy in the Supabase Dashboard -> Edge Functions -> Deploy new function.
-//   Name: ig-inbound      Verify JWT: OFF (ManyChat can't send a Supabase JWT)
-// Live URL: https://dxctcajmleurhwhbnqyj.supabase.co/functions/v1/ig-inbound
+// Runs on the EXISTING schema (no migration needed): the business/display name
+// goes in contacts.title, and structured fields are encoded as prefixed tags
+// (ig:<handle>, biz:Other, plus 'inbound').
 //
-// Expected JSON body (all strings): {
-//   "instagram_username": "thehandle",   // required
-//   "name": "Jane Doe",                   // optional
-//   "keyword": "COACH",                   // optional
-//   "timestamp": "2026-07-10T04:00:00Z"   // optional (ISO); defaults to now
-// }
-// Malformed posts (no username) are ignored with a 200 so ManyChat won't retry-storm.
+// DEPLOY (owner does this once — 2 clicks, no CLI):
+//   Supabase Dashboard -> Edge Functions -> "Deploy a new function"
+//   Name: ig-inbound     Verify JWT: OFF     (paste this file, Deploy)
+// LIVE URL after deploy:
+//   https://dxctcajmleurhwhbnqyj.supabase.co/functions/v1/ig-inbound
+//
+// ManyChat "External Request" -> POST, JSON body (all strings):
+//   { "instagram_username":"thehandle", "name":"Jane Doe",
+//     "keyword":"COACH", "timestamp":"2026-07-11T04:00:00Z" }
+// Only instagram_username is required; malformed posts are ignored (200).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -46,7 +49,7 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch (_) { return json({ ok: true, ignored: "bad_json" }); }
 
   const handle = cleanHandle(body.instagram_username ?? body.username ?? body.ig_username);
-  if (!handle) return json({ ok: true, ignored: "no_username" });   // ignore malformed, don't error
+  if (!handle) return json({ ok: true, ignored: "no_username" });
 
   const name = (typeof body.name === "string" ? body.name.trim() : "") || "";
   const keyword = (typeof body.keyword === "string" ? body.keyword.trim() : "") || "";
@@ -65,10 +68,11 @@ Deno.serve(async (req) => {
   const source = keyword ? `IG keyword: ${keyword}` : "IG keyword";
   const first = name ? name.split(/\s+/)[0] : "";
   const last = name ? name.split(/\s+/).slice(1).join(" ") : "";
+  const igTag = `ig:${handle}`;
 
-  // Dedupe by instagram handle within the org (idempotent).
+  // Dedupe by the ig:<handle> tag within the org (idempotent).
   const { data: existing } = await admin.from("contacts")
-    .select("id").eq("org_id", orgId).ilike("instagram", handle).limit(1).maybeSingle();
+    .select("id").eq("org_id", orgId).contains("tags", [igTag]).limit(1).maybeSingle();
 
   if (existing) {
     await admin.from("contacts").update({
@@ -79,9 +83,9 @@ Deno.serve(async (req) => {
 
   const { data: ins, error } = await admin.from("contacts").insert({
     org_id: orgId, first_name: first, last_name: last,
-    company: name || "@" + handle, instagram: handle,
-    status: "Replied", source, business_type: "Other",
-    tags: ["inbound", "instagram", keyword].filter(Boolean),
+    title: name || "@" + handle,
+    status: "Replied", source,
+    tags: ["inbound", igTag, "biz:Other"].filter(Boolean),
     last_reply_at: ts, last_contacted_at: ts,
   }).select("id").maybeSingle();
 

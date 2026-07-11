@@ -464,33 +464,39 @@ function confirmSend(){
   </div></div>`;
   document.body.insertAdjacentHTML("beforeend",sheet);
 }
+async function sentCount(){try{const r=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");return r.count||0;}catch(e){return null;}}
 async function doSend(btn){
   btn.disabled=true;btn.innerHTML='<span class="spin"></span> Sending…';
   const tpl=tplGet();
   const send=emailable(segFilter(state.contacts));
   const ids=send.map(c=>c.id);
+  const before=await sentCount();
+  let campId=null;
   try{
-    let campId=null;
-    try{
-      const {data:camp}=await sb.from("campaigns").insert({
-        org_id:state.org.id, name:"Mass email — "+segLabel(), subject:tpl.subject, body:tpl.body,
-        status:"queued", total:ids.length, daily_cap:(state.org.daily_cap||100)
-      }).select().maybeSingle();
-      campId=camp?camp.id:null;
-    }catch(e){}
-    const {data,error}=await sb.functions.invoke("send-campaign",{body:{
-      campaign_id:campId, contact_ids:ids, subject:tpl.subject, body:tpl.body
-    }});
-    if(error)throw error;
-    const modal=btn.closest(".modal");if(modal)modal.remove();
-    if(data&&data.ok){
-      toast("Sent "+num(data.sent||0)+(data.capped_over_daily_limit?" · "+data.capped_over_daily_limit+" held for tomorrow":""),"ok");
-    }else if(data&&data.reason==="no_provider"){toast("SMTP not configured in Supabase secrets","err");}
-    else if(data&&data.reason==="no_address"){toast("Add a mailing address in Settings first","err");navigate("settings");return;}
-    else if(data&&data.reason==="smtp_connect_failed"){toast("SMTP unreachable — check secrets/port 465","err");}
-    else{toast((data&&data.message)||"Send did not complete","err");}
-    await loadMetrics();navigate("dashboard");
-  }catch(e){toastErr(e);btn.disabled=false;btn.innerHTML="Yes — send now";}
+    const {data:camp}=await sb.from("campaigns").insert({
+      org_id:state.org.id, name:"Mass email — "+segLabel(), subject:tpl.subject, body:tpl.body,
+      status:"queued", total:ids.length, daily_cap:(state.org.daily_cap||100)
+    }).select().maybeSingle();
+    campId=camp?camp.id:null;
+  }catch(e){}
+  let data=null, invokeErr=null;
+  try{
+    const r=await sb.functions.invoke("send-campaign",{body:{campaign_id:campId, contact_ids:ids, subject:tpl.subject, body:tpl.body}});
+    data=r.data; invokeErr=r.error||null;
+  }catch(e){invokeErr=e;}
+  // The deployed edge fn can return 500 on connection cleanup AFTER sending+logging,
+  // so reconcile the true number sent from the email_events log.
+  await new Promise(r=>setTimeout(r,900));
+  const after=await sentCount();
+  const delta=(before!=null&&after!=null)?Math.max(0,after-before):null;
+  const sent=(data&&typeof data.sent==="number")?data.sent:(delta!=null?delta:0);
+  const modal=btn.closest(".modal");if(modal)modal.remove();
+  if(data&&data.reason==="no_provider"){toast("SMTP not configured in Supabase secrets","err");}
+  else if(data&&data.reason==="no_address"){toast("Add a mailing address in Settings first","err");navigate("settings");return;}
+  else if(sent>0){toast("Sent "+num(sent)+(data&&data.capped_over_daily_limit?" · "+data.capped_over_daily_limit+" held for tomorrow":""),"ok");}
+  else if(invokeErr||data&&data.reason==="smtp_connect_failed"){toast("Send didn't go through — check SMTP secrets/port 465","err");}
+  else{toast("Nothing sent (no eligible recipients)","err");}
+  await loadMetrics();navigate("dashboard");
 }
 
 /* ============ IG DM CENTER ============ */

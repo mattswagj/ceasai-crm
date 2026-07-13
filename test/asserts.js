@@ -48,5 +48,14 @@ t('email merge {{title}}/{{city}}', mergeMail('re: {{title}} in {{city}}', state
 t('named templates default', tplsGet().length, 2);
 t('active template', activeTpl().name, 'Template B');
 t('per-template report renders', /Iron Gym/.test(tplReport()), true);
+// regression: a follow-up queue must survive a re-render (was being clobbered by the segment queue)
+state.q={queue:['c1'],idx:0,text:'',_sig:'due|instagram_dm|1'};
+t('due queue survives re-render', isDueQueue('instagram_dm'), true);
+panelQueue('instagram_dm');
+t('due queue not clobbered by segment', state.q.queue, ['c1']);
+state.q._sig='';
+panelQueue('instagram_dm');
+t('normal queue rebuilds from segment', state.q.queue.length>0, true);
+
 console.log('\n'+pass+' passed, '+fail+' failed');
 process.exit(fail?1:0);

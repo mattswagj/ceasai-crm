@@ -4,7 +4,8 @@ state.contacts=[
  {id:'c1',title:'Iron Gym',email:'a@iron.com',city:'Atlanta',status:'Contacted',tags:['biz:Gym','st:GA'],last_contacted_at:iso(5),source:'mindbody'},
  {id:'c2',title:'Zen Yoga',city:'Tampa',status:'New',tags:['biz:Yoga / Pilates','st:FL','ig:zenyoga'],source:'mindbody'},
  {id:'c3',title:'Warm Lead',city:'Athens',status:'Replied',tags:['biz:Gym','st:GA','ig:warmlead'],source:'IG keyword: COACH'},
- {id:'c4',title:'Box Club',email:'b@box.com',city:'Macon',status:'Contacted',tags:['biz:MMA / Boxing','st:GA'],last_contacted_at:iso(1),source:'mindbody'}];
+ {id:'c4',title:'Box Club',email:'b@box.com',city:'Macon',status:'Contacted',tags:['biz:MMA / Boxing','st:GA'],last_contacted_at:iso(1),source:'mindbody'},
+ {id:'c5',title:'No Contact Gym',city:'Rome',status:'New',tags:['biz:Gym','st:GA'],source:'mindbody'}];
 state.events=[
  {id:'e1',contact_id:'c1',channel:'email',status:'sent',subject:'quick question about Iron Gym',sent_at:iso(5)},
  {id:'e2',contact_id:'c4',channel:'email',status:'sent',subject:'quick question about Box Club',sent_at:iso(1)},
@@ -23,13 +24,16 @@ t('metrics meetings', state.metrics.meetings, 1);
 t('metrics responses = replies+inbound', state.metrics.responses, 2);
 state.search='';
 state.segment={type:'Gym',state:'',hasEmail:false,warm:false};
-t('segment type=Gym', segFilter(state.contacts).map(c=>c.id), ['c1','c3']);
+t('segment type=Gym', segFilter(state.contacts).map(c=>c.id), ['c1','c3','c5']);
 state.segment={type:'',state:'GA',hasEmail:true,warm:false};
 t('segment GA + hasEmail', segFilter(state.contacts).map(c=>c.id), ['c1','c4']);
 state.segment={type:'',state:'',hasEmail:false,warm:true};
 t('segment warm only', segFilter(state.contacts).map(c=>c.id), ['c3']);
 state.segment={type:'',state:'',hasEmail:false,warm:false};
 state.search='zen'; t('search box', segFilter(state.contacts).map(c=>c.id), ['c2']); state.search='';
+state.segment={type:'',state:'',hasEmail:false,warm:false,noContact:true};
+t('needs-contact-info filter finds unreachable leads', segFilter(state.contacts).map(c=>c.id), ['c5']);
+state.segment={type:'',state:'',hasEmail:false,warm:false,noContact:false};
 t('SMS NOT in free channels', OUT_CHANNELS.includes('sms'), false);
 t('SMS eligibility warm-only (TCPA)', eligibleFor('sms').map(c=>c.id), ['c3']);
 t('c1 (sent 5d ago) due for follow-up', (seqState(state.contacts[0])||{}).due, true);

@@ -161,10 +161,10 @@ Worth a quick look?`
 const CH = {
   email:{label:"Email",ic:"✉️"}, instagram_dm:{label:"Instagram",ic:"📷"},
   sms:{label:"SMS 🔒",ic:"💬",warmOnly:true,paid:true}, linkedin:{label:"LinkedIn",ic:"in"},
-  call:{label:"Call",ic:"☎️"}, meeting:{label:"Meeting",ic:"📅"},
+  call:{label:"Call",ic:"☎️"}, meeting:{label:"Meeting",ic:"📅"}, followups:{label:"Follow-ups",ic:"⏰"},
 };
 const OUT_CHANNELS = ["email","instagram_dm","linkedin","call"];   // FREE channels (built + wired)
-const OUT_TABS = ["email","instagram_dm","linkedin","call","sms"];  // sms tab = paid, not wired
+const OUT_TABS = ["followups","email","instagram_dm","linkedin","call","sms"];  // sms tab = paid, not wired
 
 /* ============ STATE ============ */
 const state = {
@@ -174,6 +174,8 @@ const state = {
   metrics:{},
   segment:{type:"", state:"", hasEmail:false, warm:false},
   outCh:"email",
+  search:"",
+  editId:null,
   q:{queue:[], idx:0, text:"", _sig:""}, // shared queue for IG/LinkedIn/SMS
 };
 
@@ -200,6 +202,29 @@ function daysAgo(ts){if(!ts)return null;return Math.floor((Date.now()-new Date(t
 /* templates + counters (client-side, no schema change) */
 function tplGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("tplB")));if(v&&v.subject)return v;}catch(e){}return {...TEMPLATE_B};}
 function tplSet(o){try{localStorage.setItem(lsKey("tplB"),JSON.stringify(o));}catch(e){}}
+/* named templates (multi-template + per-template reporting) */
+function tplsGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("tpls")));if(Array.isArray(v)&&v.length)return v;}catch(e){}
+  return [{id:"tb",name:"Template B",subject:TEMPLATE_B.subject,body:TEMPLATE_B.body},
+          {id:"tf",name:"Follow-up bump",subject:"following up — {{title}}",
+           body:"Hi there,\n\nJust bumping my note in case it got buried — is {{title}} doing anything to automatically follow up with new leads?\n\nHappy to show a 2-minute example.\n\nNo worries if now's not the time."}];}
+function tplsSet(a){try{localStorage.setItem(lsKey("tpls"),JSON.stringify(a));}catch(e){}}
+function activeTplId(){return localStorage.getItem(lsKey("tplActive"))||"tb";}
+function setActiveTpl(id){localStorage.setItem(lsKey("tplActive"),id);render();}
+function activeTpl(){const a=tplsGet();return a.find(t=>t.id===activeTplId())||a[0];}
+/* follow-up sequence (owner-triggered, free — no paid scheduler) */
+function seqGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("seq")));if(Array.isArray(v)&&v.length)return v;}catch(e){}
+  return [{day:0,channel:"email"},{day:3,channel:"email"},{day:7,channel:"instagram_dm"}];}
+function seqSet(a){try{localStorage.setItem(lsKey("seq"),JSON.stringify(a));}catch(e){}}
+/* CSV export of the current segment */
+function exportCsv(){
+  const seg=segFilter(state.contacts);
+  const cols=["business","email","phone","instagram","city","state","business_type","status","source"];
+  const rows=seg.map(c=>[dispName(c),c.email||"",c.phone||"",igOf(c),c.city||"",stOf(c),bizType(c),c.status||"",c.source||""]);
+  const csv=[cols.join(",")].concat(rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(","))).join("\n");
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  const a=document.createElement("a");a.href=url;a.download="ceasai-segment.csv";a.click();URL.revokeObjectURL(url);
+  toast("Exported "+seg.length+" leads","ok");
+}
 /* accounts (multi-account rotation) */
 function acctAll(){try{const v=JSON.parse(localStorage.getItem(lsKey("accts")));if(v)return v;}catch(e){}
   return {email:[],instagram:[],sms:[],linkedin:[],active:{},booking:""};}
@@ -295,7 +320,9 @@ function render(){
 }
 
 /* ============ SEGMENT ============ */
-function segFilter(list){const s=state.segment;return list.filter(c=>{
+function segFilter(list){const s=state.segment;const q=(state.search||"").toLowerCase().trim();
+  return list.filter(c=>{
+  if(q && !((dispName(c)+" "+(c.city||"")+" "+(c.email||"")).toLowerCase().includes(q)))return false;
   if(s.type && bizType(c)!==s.type)return false;
   if(s.state && stOf(c)!==s.state.toUpperCase())return false;
   if(s.hasEmail && !hasEmail(c))return false;
@@ -322,9 +349,19 @@ function checkAlerts(){
     localStorage.setItem(lsKey("inboundSeen"),String(inbound));
   }catch(e){}
 }
-function followupsDue(){return state.contacts.filter(c=>{
-  const d=daysAgo(c.last_contacted_at);
-  return d!=null && d>=3 && d<=45 && !["Replied","Meeting","Won","Lost"].includes(c.status);});}
+function sentFor(id){return state.events.filter(e=>e.contact_id===id&&e.status==="sent"&&e.channel!=="meeting");}
+function seqState(c){
+  if(c.unsubscribed||["Replied","Meeting","Won","Lost"].includes(c.status))return null;
+  const seq=seqGet();const sent=sentFor(c.id);const idx=sent.length;
+  if(idx===0)return null;                       // not started — that's cold outreach, not a follow-up
+  if(idx>=seq.length)return {done:true};        // sequence complete
+  const gap=(seq[idx].day||0)-(seq[idx-1].day||0);
+  const last=sent[0]&&sent[0].sent_at?sent[0].sent_at:c.last_contacted_at;
+  const d=daysAgo(last);
+  return {idx,step:seq[idx],due:(d!=null&&d>=gap),days:d};
+}
+function dueList(){const out=[];for(const c of state.contacts){const s=seqState(c);if(s&&!s.done&&s.due)out.push({c,step:s.step,idx:s.idx});}return out;}
+function followupsDue(){return dueList().map(x=>x.c);}
 
 /* ============ DASHBOARD ============ */
 function viewDashboard(){
@@ -384,8 +421,25 @@ function reportCard(){
     <div class="mut" style="font-size:12px;margin-bottom:10px">Sent, replies &amp; reply-rate by channel. Log replies as they land so this stays true.</div>
     <table class="rtable"><thead><tr><th>Channel</th><th>Sent</th><th>Replies</th><th>Reply %</th></tr></thead><tbody>${rows}</tbody></table>
     ${top.length?`<div class="mut" style="font-size:12.5px;margin-top:10px">Top replying segments: ${top.map(([t,n])=>esc(t)+" ("+n+")").join(" · ")}</div>`:""}
+    ${tplReport()}
     <button class="btn ghost block" style="margin-top:10px" onclick="quickReply()">+ Log a reply</button>
   </div>`;
+}
+function tplReport(){
+  const bySubj={};
+  state.events.forEach(e=>{if(e.status!=="sent"||e.channel==="meeting")return;const k=e.subject||"(no subject)";
+    bySubj[k]=bySubj[k]||{sent:0,rep:0};bySubj[k].sent++;});
+  state.events.forEach(e=>{if(e.status!=="replied")return;
+    let k=e.personalization&&e.personalization.subject;
+    if(!k&&e.contact_id){const last=state.events.find(x=>x.contact_id===e.contact_id&&x.status==="sent");k=last&&last.subject;}
+    if(!k)return;if(bySubj[k])bySubj[k].rep++;});
+  const rows=Object.entries(bySubj).sort((a,b)=>b[1].sent-a[1].sent).slice(0,5);
+  if(!rows.length)return "";
+  return `<div style="font-weight:800;margin:14px 0 6px;font-size:13px">By message</div>
+  <table class="rtable"><thead><tr><th>Message</th><th>Sent</th><th>Replies</th><th>Reply %</th></tr></thead><tbody>
+  ${rows.map(([k,v])=>`<tr><td class="ch">${esc(k.length>34?k.slice(0,34)+"…":k)}</td><td>${num(v.sent)}</td><td>${num(v.rep)}</td>
+    <td>${v.sent?`<span class="pill ${v.rep/v.sent>=0.15?"g":v.rep/v.sent>=0.05?"y":"r"}">${pct(v.rep,v.sent)}%</span>`:"—"}</td></tr>`).join("")}
+  </tbody></table>`;
 }
 function quickReply(){
   const opts=OUT_CHANNELS.map(ch=>`<button class="btn block" style="margin-bottom:8px" onclick="logReplyCh('${ch}',this)">${CH[ch].ic} Reply via ${CH[ch].label}</button>`).join("");
@@ -408,6 +462,7 @@ function viewLeads(){
   ${imported?"":`<div class="banner info">No leads imported yet. Tap below to load the 1,791 Mindbody businesses.</div>
      <button class="btn primary block lg" style="margin-bottom:14px" onclick="importLeads(this)">⬇ Import Mindbody leads (1,791)</button>`}
   <div class="card">
+    <div class="field"><label>Search</label><input id="l-search" value="${esc(state.search||"")}" placeholder="business, city or email…" oninput="state.search=this.value;clearTimeout(window._st);window._st=setTimeout(()=>{const v=this.value;render();const el=$('#l-search');if(el){el.focus();el.setSelectionRange(v.length,v.length);}},250)"/></div>
     <label>Business type</label>
     <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px">${typeChips}</div>
     <div class="row">
@@ -422,6 +477,7 @@ function viewLeads(){
       <div><div style="font-weight:900;font-size:26px">${num(seg.length)}</div><div class="mut" style="font-weight:700">in segment · ${num(em.length)} emailable · ${num(ig.length)} on IG</div></div>
     </div>
     <button class="btn primary block" onclick="navigate('outreach')">🚀 Outreach to this segment</button>
+    <button class="btn ghost block" style="margin-top:8px" onclick="exportCsv()">⬇ Export segment to CSV</button>
   </div>
   <div class="card"><div style="font-weight:800;margin-bottom:10px">Preview <span class="mut" style="font-weight:600">(first 40)</span></div>${preview}</div>`;
 }
@@ -432,7 +488,7 @@ function leadCard(c){
   if(hasEmail(c))tags.push('<span class="tag em">✉ email</span>');
   const ig=igOf(c);if(ig)tags.push('<span class="tag ig">📷 @'+esc(ig)+'</span>');
   tags.push('<span class="tag">'+esc(bizType(c))+'</span>');
-  return `<div class="lead"><div class="nm">${esc(dispName(c))}</div>
+  return `<div class="lead" style="cursor:pointer" onclick="editLead('${c.id}')"><div class="nm">${esc(dispName(c))}</div>
     <div class="meta">${esc([c.city,stOf(c)].filter(Boolean).join(", "))||"—"}</div><div>${tags.join("")}</div></div>`;
 }
 async function importLeads(btn){
@@ -454,11 +510,67 @@ async function importLeads(btn){
   }catch(e){toastErr(e);btn.disabled=false;btn.innerHTML=o;}
 }
 
+/* ============ LEAD DETAIL / EDIT (enrich contact info) ============ */
+function editLead(id){
+  const c=state.contacts.find(x=>x.id===id);if(!c)return;
+  state.editId=id;
+  const typeOpts=BIZ_TYPES.map(t=>`<option value="${esc(t)}" ${bizType(c)===t?"selected":""}>${esc(t)}</option>`).join("");
+  const stOpts=["New","Contacted","Replied","Meeting","Won","Lost"].map(x=>`<option value="${x}" ${c.status===x?"selected":""}>${x}</option>`).join("");
+  document.body.insertAdjacentHTML("beforeend",`<div class="modal" onclick="if(event.target===this)this.remove()"><div class="sheet">
+    <div class="h1">${esc(dispName(c))}</div>
+    <div class="sub">Add contact info so you can actually reach them</div>
+    <div class="field"><label>Business name</label><input id="ed-title" value="${esc(c.title||"")}"/></div>
+    <div class="row"><div class="field"><label>Email</label><input id="ed-email" value="${esc(c.email||"")}" placeholder="name@business.com"/></div>
+      <div class="field"><label>Phone</label><input id="ed-phone" value="${esc(c.phone||"")}"/></div></div>
+    <div class="row"><div class="field"><label>Instagram</label><input id="ed-ig" value="${esc(igOf(c))}" placeholder="@handle"/></div>
+      <div class="field"><label>City</label><input id="ed-city" value="${esc(c.city||"")}"/></div></div>
+    <div class="row"><div class="field"><label>State</label><input id="ed-state" value="${esc(stOf(c))}" maxlength="2"/></div>
+      <div class="field"><label>Business type</label><select id="ed-type">${typeOpts}</select></div></div>
+    <div class="field"><label>Status</label><select id="ed-status">${stOpts}</select></div>
+    <div class="field"><label>Notes</label><textarea id="ed-notes" style="min-height:70px">${esc(c.notes||"")}</textarea></div>
+    <button class="btn primary block lg" onclick="saveLead(this)">Save</button>
+    <div class="row" style="margin-top:8px">
+      <button class="btn good" onclick="leadReplied('${c.id}',this)">↩ Got a reply</button>
+      <button class="btn" style="background:#ffd36b;color:#3a2c00;border:none" onclick="markMeeting('${c.id}',this)">📅 Booked</button>
+    </div>
+    <button class="btn ghost block" style="margin-top:8px" onclick="this.closest('.modal').remove()">Close</button>
+  </div></div>`);
+}
+async function saveLead(btn){
+  const id=state.editId;const c=state.contacts.find(x=>x.id===id);if(!c)return;
+  btn.disabled=true;btn.textContent="Saving…";
+  const ig=igClean($("#ed-ig").value);
+  const st=($("#ed-state").value||"").toUpperCase().slice(0,2);
+  const type=$("#ed-type").value;
+  const tags=(c.tags||[]).filter(t=>!/^(biz:|st:|ig:)/.test(t));
+  tags.push("biz:"+type); if(st)tags.push("st:"+st); if(ig)tags.push("ig:"+ig);
+  const patch={title:$("#ed-title").value.trim()||null,email:$("#ed-email").value.trim()||null,
+    phone:$("#ed-phone").value.trim()||null,city:$("#ed-city").value.trim()||null,
+    status:$("#ed-status").value,notes:$("#ed-notes").value.trim()||null,tags,
+    updated_at:new Date().toISOString()};
+  const {error}=await sb.from("contacts").update(patch).eq("id",id);
+  if(error){toastErr(error);btn.disabled=false;btn.textContent="Save";return;}
+  Object.assign(c,patch);
+  computeMetrics();toast("Saved","ok");
+  const md=btn.closest(".modal");if(md)md.remove();render();
+}
+async function leadReplied(id,btn){
+  btn.disabled=true;
+  const c=state.contacts.find(x=>x.id===id);
+  const last=state.events.find(e=>e.contact_id===id&&e.status==="sent"&&e.channel!=="meeting");
+  const ch=last?last.channel:"email";
+  await logEvent(ch,id,"replied",{subject:last?last.subject:null});
+  try{await sb.from("contacts").update({status:"Replied",last_reply_at:new Date().toISOString()}).eq("id",id);if(c)c.status="Replied";}catch(e){}
+  toast("Reply logged ("+CH[ch].label+")","ok");
+  const md=btn.closest(".modal");if(md)md.remove();render();
+}
+
 /* ============ OUTREACH (all channels) ============ */
 function viewOutreach(){
   const tabs=OUT_TABS.map(ch=>`<button class="${state.outCh===ch?'on':''}" onclick="state.outCh='${ch}';render()">${CH[ch].ic} ${CH[ch].label}</button>`).join("");
   let panel="";
   if(state.outCh==="sms")panel=panelPaid();
+  else if(state.outCh==="followups")panel=panelFollowups();
   else if(state.outCh==="email")panel=panelEmail();
   else if(state.outCh==="call")panel=panelCall();
   else panel=panelQueue(state.outCh);
@@ -469,7 +581,7 @@ function viewOutreach(){
 
 /* ---- EMAIL panel (one-click mass) ---- */
 function panelEmail(){
-  const tpl=tplGet();const seg=segFilter(state.contacts);const send=emailable(seg);
+  const tpl=activeTpl();const tpls=tplsGet();const seg=segFilter(state.contacts);const send=emailable(seg);
   const org=state.org||{};const acct=acctActive("email");
   const fromEmail=(acct&&acct.from_email)||org.from_email;
   const ready=!!org.mailing_address && !!fromEmail;
@@ -483,6 +595,8 @@ function panelEmail(){
   </div>
   ${ready?"":`<div class="banner warn">⚠ Add a From email (Accounts) + mailing address (Settings) before sending.</div>`}
   <div class="card">
+    <div class="field"><label>Message template</label>
+      <select onchange="setActiveTpl(this.value)">${tpls.map(t=>`<option value="${t.id}" ${t.id===tpl.id?"selected":""}>${esc(t.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Subject</label><input id="e-subj" value="${esc(tpl.subject)}" oninput="saveTpl()"/></div>
     <div class="field" style="margin-bottom:6px"><label>Body — {{title}} (business) &amp; {{city}} auto-fill</label><textarea id="e-body" oninput="saveTpl()">${esc(tpl.body)}</textarea></div>
     <div class="row"><button class="btn ghost" onclick="insertBooking('e-body')">📅 Insert booking link</button><button class="btn ghost" onclick="resetTpl()">↺ Template B</button></div>
@@ -496,8 +610,8 @@ function panelEmail(){
 function mergeMail(t,c){const map={title:dispName(c),business:dispName(c),company:dispName(c),city:c.city||"your area",
   first_name:c.first_name||"there",first:c.first_name||"there",booking:bookingUrl()||"(booking link)"};
   return String(t||"").replace(/\{\{?\s*(\w+)\s*\}?\}/g,(m,k)=>map[k]!=null?map[k]:m);}
-function saveTpl(){tplSet({subject:$("#e-subj").value,body:$("#e-body").value});}
-function resetTpl(){tplSet({...TEMPLATE_B});render();}
+function saveTpl(){const a=tplsGet();const t=a.find(x=>x.id===activeTplId())||a[0];t.subject=$("#e-subj").value;t.body=$("#e-body").value;tplsSet(a);}
+function resetTpl(){const a=tplsGet();const t=a.find(x=>x.id===activeTplId())||a[0];t.subject=TEMPLATE_B.subject;t.body=TEMPLATE_B.body;tplsSet(a);render();}
 function insertBooking(id){const b=bookingUrl();if(!b){toast("Add a booking link in Accounts","err");return;}
   const el=$("#"+id);el.value=el.value.replace(/\s*$/,"")+"\n\nBook a quick call: "+b;if(id==="e-body")saveTpl();}
 function confirmSend(){
@@ -511,7 +625,7 @@ function confirmSend(){
 async function sentCount(){try{const r=await sb.from("email_events").select("id",{count:"exact",head:true}).eq("channel","email").eq("status","sent");return r.count||0;}catch(e){return null;}}
 async function doSend(btn){
   btn.disabled=true;btn.innerHTML='<span class="spin"></span> Sending…';
-  const tpl=tplGet();const send=emailable(segFilter(state.contacts));const ids=send.map(c=>c.id);
+  const tpl=activeTpl();const send=emailable(segFilter(state.contacts));const ids=send.map(c=>c.id);
   const acct=acctActive("email");
   if(acct&&acct.from_email&&acct.from_email!==state.org.from_email){
     try{await sb.from("orgs").update({from_email:acct.from_email,reply_to:acct.reply_to||null}).eq("id",state.org.id);state.org.from_email=acct.from_email;}catch(e){}
@@ -531,6 +645,52 @@ async function doSend(btn){
   else if(invokeErr||(data&&data.reason==="smtp_connect_failed")){toast("Send didn't go through — check SMTP secrets/port 465","err");}
   else{toast("Nothing sent (no eligible recipients)","err");}
   await loadAll();navigate("dashboard");
+}
+
+/* ---- FOLLOW-UPS panel (sequence automation, owner-triggered = free) ---- */
+function panelFollowups(){
+  const due=dueList();
+  const seq=seqGet();
+  const byCh={};due.forEach(d=>{const ch=d.step.channel;(byCh[ch]=byCh[ch]||[]).push(d.c);});
+  const emailDue=(byCh.email||[]).filter(c=>hasEmail(c)&&!c.unsubscribed);
+  const seqLine=seq.map((s,i)=>`Day ${s.day} → ${CH[s.channel]?CH[s.channel].label:s.channel}`).join("  ·  ");
+  const groups=Object.keys(byCh).map(ch=>{
+    const list=byCh[ch];
+    const act=ch==="email"
+      ? `<button class="btn primary block" ${emailDue.length?"":"disabled"} onclick="sendFollowupEmail(this)">✉️ Send follow-up to ${num(emailDue.length)} due</button>`
+      : `<button class="btn primary block" onclick="loadDueQueue('${ch}')">${CH[ch]?CH[ch].ic:""} Work ${num(list.length)} in the ${CH[ch]?CH[ch].label:ch} queue</button>`;
+    return `<div class="card">
+      <div style="font-weight:800;margin-bottom:8px">${CH[ch]?CH[ch].ic+" "+CH[ch].label:ch} · ${num(list.length)} due</div>
+      ${list.slice(0,5).map(c=>`<div class="lead" style="cursor:pointer" onclick="editLead('${c.id}')"><div class="nm">${esc(dispName(c))}</div>
+        <div class="meta">${esc(bizType(c))} · last touch ${num(daysAgo(c.last_contacted_at))}d ago</div></div>`).join("")}
+      ${list.length>5?`<div class="mut" style="font-size:12px;margin-bottom:8px">+ ${num(list.length-5)} more</div>`:""}
+      ${act}</div>`;
+  }).join("");
+  return `<div class="banner info">⏰ <b>Follow-up sequence:</b> ${esc(seqLine)}. Leads that already got a first touch and haven't replied surface here when the next step is due. You press send — nothing goes out on its own (that's what keeps it free and safe). Edit the sequence in Settings.</div>
+  ${due.length?groups:`<div class="card center"><div style="font-size:38px">✅</div><div style="font-weight:800;margin-top:6px">Nothing due</div>
+    <div class="mut">No follow-ups are due right now. Send a first touch from the Email or Instagram tabs to start the sequence.</div></div>`}`;
+}
+function loadDueQueue(ch){
+  const ids=dueList().filter(d=>d.step.channel===ch).map(d=>d.c.id);
+  state.outCh=ch;state.q.queue=ids;state.q.idx=0;state.q.text="";state.q._sig="due|"+ch+"|"+ids.length;
+  render();toast("Loaded "+ids.length+" due into the queue","ok");
+}
+async function sendFollowupEmail(btn){
+  const due=dueList().filter(d=>d.step.channel==="email").map(d=>d.c).filter(c=>hasEmail(c)&&!c.unsubscribed);
+  if(!due.length)return;
+  const tpls=tplsGet();const fu=tpls.find(t=>/follow/i.test(t.name))||tpls[1]||tpls[0];
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Sending…';
+  const before=await sentCount();
+  let campId=null;
+  try{const {data:camp}=await sb.from("campaigns").insert({org_id:state.org.id,name:"Follow-up — "+fu.name,subject:fu.subject,body:fu.body,status:"queued",total:due.length,daily_cap:(state.org.daily_cap||100)}).select().maybeSingle();campId=camp?camp.id:null;}catch(e){}
+  let data=null,err=null;
+  try{const r=await sb.functions.invoke("send-campaign",{body:{campaign_id:campId,contact_ids:due.map(c=>c.id),subject:fu.subject,body:fu.body}});data=r.data;err=r.error||null;}catch(e){err=e;}
+  await new Promise(r=>setTimeout(r,900));
+  const after=await sentCount();
+  const sent=(data&&typeof data.sent==="number")?data.sent:Math.max(0,(after||0)-(before||0));
+  if(sent>0)toast("Follow-up sent to "+num(sent),"ok");
+  else toast("Follow-up didn't send — check SMTP","err");
+  await loadAll();render();
 }
 
 /* ---- QUEUE panel (Instagram / LinkedIn / SMS) ---- */
@@ -583,7 +743,10 @@ function renderQCard(ch){
       <button class="btn ghost" onclick="qSkip()">Skip</button>
       <button class="btn good" onclick="qSent(this,'${c.id}','${ch}')">✓ Mark sent</button>
     </div>
-    <button class="btn ghost block" style="margin-top:9px" onclick="markMeeting('${c.id}',this)">📅 Booked a meeting</button>
+    <div class="row" style="margin-top:9px">
+      <button class="btn" style="background:var(--good);color:#06231a;border:none" onclick="leadReplied('${c.id}',this)">↩ Got reply</button>
+      <button class="btn" style="background:#ffd36b;color:#3a2c00;border:none" onclick="markMeeting('${c.id}',this)">📅 Booked</button>
+    </div>
   </div>`;
 }
 function qOpenButton(c,ch){
@@ -750,6 +913,26 @@ function viewSettings(){
   </div>
   <div class="card"><div style="font-weight:800;margin-bottom:6px">Email engine</div>
     <div class="mut" style="font-size:13px">Sends run through the Supabase <b>send-campaign</b> edge function using Gmail SMTP. Credentials live only as Supabase secrets. Footer + unsubscribe auto-appended (CAN-SPAM).</div></div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">⏰ Follow-up sequence</div>
+    <div class="mut" style="font-size:12.5px;margin-bottom:10px">After a first touch, leads surface in the <b>Follow-ups</b> queue when the next step is due. You press send — nothing fires automatically (an auto-sender needs a paid scheduler; this stays free and ban-safe).</div>
+    ${seqGet().map((st,i)=>`<div class="row" style="margin-bottom:8px;align-items:center">
+      <div class="field" style="margin:0;max-width:90px"><input type="number" min="0" value="${st.day}" onchange="seqEdit(${i},'day',this.value)"/></div>
+      <div class="field" style="margin:0"><select onchange="seqEdit(${i},'channel',this.value)">
+        ${OUT_CHANNELS.map(c=>`<option value="${c}" ${st.channel===c?"selected":""}>${CH[c].label}</option>`).join("")}</select></div>
+      <button class="btn ghost" style="flex:none;max-width:44px;color:var(--bad)" onclick="seqDel(${i})">✕</button></div>`).join("")}
+    <button class="btn block" onclick="seqAdd()">+ Add step</button>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">📝 Message templates</div>
+    <div class="mut" style="font-size:12.5px;margin-bottom:10px">Reporting breaks replies down by message, so you can see which one actually works.</div>
+    ${tplsGet().map(t=>`<div class="acct"><span class="dot ${t.id===activeTplId()?"on":""}"></span>
+      <div style="flex:1"><div class="lbl">${esc(t.name)}</div><div class="id">${esc(t.subject)}</div></div>
+      <button class="btn ghost" style="padding:6px 10px;flex:none" onclick="setActiveTpl('${t.id}')">${t.id===activeTplId()?"Active":"Use"}</button>
+      ${tplsGet().length>1?`<button class="btn ghost" style="padding:6px 9px;flex:none;color:var(--bad)" onclick="tplDel('${t.id}')">✕</button>`:""}</div>`).join("")}
+    <div class="field" style="margin-top:6px"><input id="tpl-new" placeholder="New template name"/></div>
+    <button class="btn block" onclick="tplAdd()">+ Add template</button>
+  </div>
   <div class="card"><div style="font-weight:800;margin-bottom:6px">💵 What this costs</div>
     <table class="rtable"><thead><tr><th>Piece</th><th>Cost</th></tr></thead><tbody>
       <tr><td class="ch">Supabase (DB + functions)</td><td><span class="pill g">Free</span></td></tr>
@@ -778,6 +961,13 @@ async function saveSettings(btn){
   if(error){toastErr(error);btn.disabled=false;btn.textContent=o;return;}
   Object.assign(state.org,patch);toast("Saved","ok");btn.disabled=false;btn.textContent=o;
 }
+
+function seqEdit(i,k,v){const a=seqGet();a[i][k]=(k==="day")?(parseInt(v)||0):v;a.sort((x,y)=>x.day-y.day);seqSet(a);render();}
+function seqDel(i){const a=seqGet();if(a.length<=1){toast("Keep at least one step","err");return;}a.splice(i,1);seqSet(a);render();}
+function seqAdd(){const a=seqGet();a.push({day:(a[a.length-1].day||0)+3,channel:"email"});seqSet(a);render();toast("Step added","ok");}
+function tplAdd(){const n=$("#tpl-new").value.trim();if(!n){toast("Name it first","err");return;}
+  const a=tplsGet();a.push({id:"t"+Date.now().toString(36),name:n,subject:TEMPLATE_B.subject,body:TEMPLATE_B.body});tplsSet(a);toast("Template added","ok");render();}
+function tplDel(id){const a=tplsGet().filter(t=>t.id!==id);tplsSet(a);if(activeTplId()===id)setActiveTpl(a[0].id);else render();}
 
 /* ============ START ============ */
 boot();

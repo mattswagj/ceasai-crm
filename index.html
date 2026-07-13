@@ -160,10 +160,11 @@ Worth a quick look?`
 // channel keys logged in email_events.channel
 const CH = {
   email:{label:"Email",ic:"✉️"}, instagram_dm:{label:"Instagram",ic:"📷"},
-  sms:{label:"SMS",ic:"💬",warmOnly:true}, linkedin:{label:"LinkedIn",ic:"in"},
+  sms:{label:"SMS 🔒",ic:"💬",warmOnly:true,paid:true}, linkedin:{label:"LinkedIn",ic:"in"},
   call:{label:"Call",ic:"☎️"}, meeting:{label:"Meeting",ic:"📅"},
 };
-const OUT_CHANNELS = ["email","instagram_dm","sms","linkedin","call"];
+const OUT_CHANNELS = ["email","instagram_dm","linkedin","call"];   // FREE channels (built + wired)
+const OUT_TABS = ["email","instagram_dm","linkedin","call","sms"];  // sms tab = paid, not wired
 
 /* ============ STATE ============ */
 const state = {
@@ -455,9 +456,10 @@ async function importLeads(btn){
 
 /* ============ OUTREACH (all channels) ============ */
 function viewOutreach(){
-  const tabs=OUT_CHANNELS.map(ch=>`<button class="${state.outCh===ch?'on':''}" onclick="state.outCh='${ch}';render()">${CH[ch].ic} ${CH[ch].label}</button>`).join("");
+  const tabs=OUT_TABS.map(ch=>`<button class="${state.outCh===ch?'on':''}" onclick="state.outCh='${ch}';render()">${CH[ch].ic} ${CH[ch].label}</button>`).join("");
   let panel="";
-  if(state.outCh==="email")panel=panelEmail();
+  if(state.outCh==="sms")panel=panelPaid();
+  else if(state.outCh==="email")panel=panelEmail();
   else if(state.outCh==="call")panel=panelCall();
   else panel=panelQueue(state.outCh);
   return `<div class="h1">Outreach</div>
@@ -606,6 +608,35 @@ async function markMeeting(id,btn){btn.disabled=true;
   toast("🎉 Meeting booked!","ok");render();
 }
 
+/* ---- PAID CHANNELS (NOT BUILT — cost notice only; hooks left for later) ---- */
+function panelPaid(){
+  const warm=state.contacts.filter(isWarm).length;
+  return `
+  <div class="banner warn">🔒 <b>SMS is not enabled — it costs money.</b> This build is 100% free-tier, so nothing here is wired to a paid service.</div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:10px">What SMS would cost</div>
+    <table class="rtable"><thead><tr><th>Item</th><th>Cost</th></tr></thead><tbody>
+      <tr><td class="ch">Twilio phone number</td><td>~$1.15 / mo</td></tr>
+      <tr><td class="ch">Outbound SMS (US)</td><td>~$0.0079 / msg</td></tr>
+      <tr><td class="ch">Carrier fees (A2P 10DLC)</td><td>~$2 reg + per-msg fees</td></tr>
+      <tr><td class="ch">A2P 10DLC brand/campaign</td><td>~$4 + ~$1.50–10 / mo</td></tr>
+    </tbody></table>
+    <div class="mut" style="font-size:12.5px;margin-top:10px">Rough: <b>~$5–15/mo</b> before volume, then well under a cent per text. Prices are Twilio's published US rates and change — confirm before you commit.</div>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:10px">WhatsApp Business API</div>
+    <div class="mut" style="font-size:13px">Billed <b>per 24-hour conversation</b> (marketing conversations in the US run roughly $0.02–0.09 each, varies by country/category), plus a provider (Twilio/360dialog) on top. Also not built.</div>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">⚖ And the legal reason to go slow</div>
+    <div class="mut" style="font-size:13px">Even once you pay for it, <b>cold B2B texting carries real TCPA exposure</b> in the US (statutory damages per message). If you ever switch SMS on, keep it to <b>warm leads only</b> — people who replied or opted in. You currently have <b>${num(warm)}</b> warm lead(s).</div>
+  </div>
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">Hook is ready</div>
+    <div class="mut" style="font-size:13px">The channel, warm-only gate, message generator and <code>email_events</code> logging (channel <code>sms</code>) already exist in the code. Switching SMS on later = add a provider key + send call. No re-architecture.</div>
+  </div>`;
+}
+
 /* ---- CALL panel (manual logging) ---- */
 function panelCall(){
   const seg=segFilter(state.contacts);const withPhone=seg.filter(c=>c.phone);
@@ -719,6 +750,20 @@ function viewSettings(){
   </div>
   <div class="card"><div style="font-weight:800;margin-bottom:6px">Email engine</div>
     <div class="mut" style="font-size:13px">Sends run through the Supabase <b>send-campaign</b> edge function using Gmail SMTP. Credentials live only as Supabase secrets. Footer + unsubscribe auto-appended (CAN-SPAM).</div></div>
+  <div class="card"><div style="font-weight:800;margin-bottom:6px">💵 What this costs</div>
+    <table class="rtable"><thead><tr><th>Piece</th><th>Cost</th></tr></thead><tbody>
+      <tr><td class="ch">Supabase (DB + functions)</td><td><span class="pill g">Free</span></td></tr>
+      <tr><td class="ch">Vercel hosting</td><td><span class="pill g">Free</span></td></tr>
+      <tr><td class="ch">Gmail SMTP email</td><td><span class="pill g">Free</span></td></tr>
+      <tr><td class="ch">Instagram + LinkedIn queues</td><td><span class="pill g">Free</span></td></tr>
+      <tr><td class="ch">Call logging, reporting, alerts</td><td><span class="pill g">Free</span></td></tr>
+      <tr><td class="ch">Calendly / Cal.com booking</td><td><span class="pill g">Free tier</span></td></tr>
+      <tr><td class="ch">ManyChat (fires IG auto-replies)</td><td><span class="pill y">Free 25 contacts · $14–29/mo</span></td></tr>
+      <tr><td class="ch">SMS (Twilio)</td><td><span class="pill r">Not built · ~$5–15/mo+</span></td></tr>
+      <tr><td class="ch">WhatsApp Business API</td><td><span class="pill r">Not built · per-conversation</span></td></tr>
+    </tbody></table>
+    <div class="mut" style="font-size:12px;margin-top:8px">Everything running today is $0. Nothing in this app requires a paid service.</div>
+  </div>
   <div class="card"><div style="font-weight:800;margin-bottom:6px">Data</div>
     <div class="mut" style="font-size:13px;margin-bottom:10px">${num(state.contacts.length)} leads · ${num(state.contacts.filter(c=>c.source==="mindbody").length)} Mindbody · ${num(state.metrics.inbound)} warm inbound.</div>
     <button class="btn block" onclick="navigate('leads')">Manage leads &amp; segments →</button></div>

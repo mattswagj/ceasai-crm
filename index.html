@@ -212,6 +212,8 @@ function activeTplId(){return localStorage.getItem(lsKey("tplActive"))||"tb";}
 function setActiveTpl(id){localStorage.setItem(lsKey("tplActive"),id);render();}
 function activeTpl(){const a=tplsGet();return a.find(t=>t.id===activeTplId())||a[0];}
 /* follow-up sequence (owner-triggered, free — no paid scheduler) */
+function sentToday(){const t=new Date();t.setHours(0,0,0,0);
+  return state.events.filter(e=>e.channel==="email"&&e.status==="sent"&&e.sent_at&&new Date(e.sent_at)>=t).length;}
 function seqGet(){try{const v=JSON.parse(localStorage.getItem(lsKey("seq")));if(Array.isArray(v)&&v.length)return v;}catch(e){}
   return [{day:0,channel:"email"},{day:3,channel:"email"},{day:7,channel:"instagram_dm"}];}
 function seqSet(a){try{localStorage.setItem(lsKey("seq"),JSON.stringify(a));}catch(e){}}
@@ -395,6 +397,7 @@ function viewDashboard(){
     ${fu?`<div class="alert"><span class="ai">⏰</span><div style="flex:1"><b>${num(fu)}</b> follow-up(s) due (contacted 3+ days ago, no reply)</div><button class="btn ghost" style="flex:none;padding:6px 10px" onclick="state.outCh='email';navigate('outreach')">Work</button></div>`:""}
     ${notifOn?"":`<div class="alert"><span class="ai">🔔</span><div style="flex:1">Get desktop alerts for new replies &amp; leads</div><button class="btn ghost" style="flex:none;padding:6px 10px" onclick="enableNotifs()">Enable</button></div>`}
   </div>`:""}
+  ${checklistCard()}
   ${reportCard()}
   <div class="card" style="margin-top:14px">
     <div class="row" style="align-items:center">
@@ -403,6 +406,30 @@ function viewDashboard(){
     </div>
   </div>
   <div class="card"><div style="font-weight:800;margin-bottom:10px">Leads by business type</div>${brk}</div>`;
+}
+function checklistCard(){
+  if(localStorage.getItem(lsKey("hideChecklist")))return "";
+  const a=acctAll();
+  const steps=[
+    {ok:(a.email||[]).length>0||!!(state.org&&state.org.from_email), t:"Add a sending account", go:"navigate('accounts')"},
+    {ok:!!bookingUrl(), t:"Add your booking link (free Calendly/Cal.com)", go:"navigate('accounts')"},
+    {ok:state.contacts.some(c=>c.source==="mindbody"), t:"Import the Mindbody leads", go:"navigate('leads')"},
+    {ok:state.metrics.emails>0, t:"Send your first email batch", go:"state.outCh='email';navigate('outreach')"},
+    {ok:state.metrics.dms>0, t:"Work the Instagram DM queue", go:"state.outCh='instagram_dm';navigate('outreach')"},
+    {ok:state.metrics.meetings>0, t:"Book your first meeting 🎯", go:"navigate('dashboard')"},
+  ];
+  const done=steps.filter(s=>s.ok).length;
+  if(done===steps.length)return "";
+  return `<div class="card">
+    <div class="row" style="align-items:center;margin-bottom:8px">
+      <div style="font-weight:800">Get set up (${done}/${steps.length})</div>
+      <button class="btn ghost" style="flex:none;max-width:80px;padding:5px 8px;font-size:12px" onclick="localStorage.setItem(lsKey('hideChecklist'),'1');render()">Hide</button>
+    </div>
+    ${steps.map(s=>`<div class="alert" style="${s.ok?'opacity:.55':''}">
+      <span class="ai">${s.ok?"✅":"⬜"}</span>
+      <div style="flex:1;${s.ok?'text-decoration:line-through':''}">${esc(s.t)}</div>
+      ${s.ok?"":`<button class="btn ghost" style="flex:none;padding:6px 10px" onclick="${s.go}">Go</button>`}</div>`).join("")}
+  </div>`;
 }
 function reportCard(){
   const m=state.metrics;
@@ -605,7 +632,7 @@ function panelEmail(){
   ${sample?`<div class="card"><div style="font-weight:800;margin-bottom:8px">Preview — ${esc(dispName(sample))}</div>
     <div class="qbox"><b>${esc(mergeMail(tpl.subject,sample))}</b>\n\n${esc(mergeMail(tpl.body,sample))}</div></div>`:""}
   <button class="btn primary block lg" ${send.length&&ready?"":"disabled"} onclick="confirmSend()">🚀 Send to all ${num(send.length)}</button>
-  <div class="mut center" style="font-size:12px;margin-top:8px">Paced · ${num(org.daily_cap||100)}/day cap · one email per business</div>`;
+  <div class="mut center" style="font-size:12px;margin-top:8px">Paced · <b>${num(sentToday())}/${num(org.daily_cap||100)}</b> sent today · one email per business</div>`;
 }
 function mergeMail(t,c){const map={title:dispName(c),business:dispName(c),company:dispName(c),city:c.city||"your area",
   first_name:c.first_name||"there",first:c.first_name||"there",booking:bookingUrl()||"(booking link)"};
